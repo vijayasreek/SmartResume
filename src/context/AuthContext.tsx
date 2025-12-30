@@ -18,7 +18,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check active session
+    // Initial Session Check
     const checkSession = async () => {
       try {
         const currentUser = await storage.getCurrentUser();
@@ -33,10 +33,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     checkSession();
 
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    // IMPORTANT: We use setTimeout to avoid blocking the auth listener with async calls (deadlock prevention)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-        const currentUser = await storage.getCurrentUser();
-        setUser(currentUser);
+        setTimeout(async () => {
+          // Pass session to avoid re-fetching it
+          const currentUser = await storage.getCurrentUser(session);
+          setUser(currentUser);
+        }, 0);
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
       }
@@ -48,15 +52,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const login = async (email: string, pass: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password: pass,
     });
     if (error) throw error;
+
+    // CRITICAL FIX: Manually update user state immediately after success.
+    // This ensures that when this promise resolves, the 'user' state is ready 
+    // for the ProtectedRoute, preventing redirects back to login.
+    if (data.session) {
+      const currentUser = await storage.getCurrentUser(data.session);
+      setUser(currentUser);
+    }
   };
 
   const register = async (name: string, email: string, pass: string) => {
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password: pass,
       options: {
@@ -64,6 +76,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       },
     });
     if (error) throw error;
+
+    // CRITICAL FIX: Update state immediately
+    if (data.session) {
+      const currentUser = await storage.getCurrentUser(data.session);
+      setUser(currentUser);
+    }
   };
 
   const logout = async () => {

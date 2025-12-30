@@ -1,22 +1,32 @@
 import { supabase } from '../lib/supabase';
 import { Resume, User } from '../types';
+import { Session } from '@supabase/supabase-js';
 
 export const storage = {
   // --- Auth & User ---
-  getCurrentUser: async (): Promise<User | null> => {
-    const { data: { session } } = await supabase.auth.getSession();
+  // Optimized to accept session if we already have it (avoids extra call)
+  getCurrentUser: async (existingSession?: Session | null): Promise<User | null> => {
+    let session = existingSession;
+    
+    if (!session) {
+      const { data } = await supabase.auth.getSession();
+      session = data.session;
+    }
+
     if (!session?.user) return null;
 
     // Fetch profile to get the name
+    // We use maybeSingle() instead of single() to avoid errors if profile creation is delayed
     const { data: profile } = await supabase
       .from('profiles')
       .select('name, email')
       .eq('id', session.user.id)
-      .single();
+      .maybeSingle();
 
     return {
       id: session.user.id,
       email: session.user.email!,
+      // Prioritize profile name, fallback to metadata (faster), then default
       name: profile?.name || session.user.user_metadata?.name || 'User',
     };
   },
@@ -31,8 +41,6 @@ export const storage = {
 
     if (error) throw error;
     
-    // Map DB snake_case to camelCase if needed, but we stored JSONB so structure is preserved
-    // However, top level fields like user_id need mapping
     return (data || []).map((r: any) => ({
       id: r.id,
       userId: r.user_id,
@@ -75,7 +83,6 @@ export const storage = {
   },
 
   saveResume: async (resume: Resume, userId: string): Promise<Resume> => {
-    // Prepare object for DB (snake_case columns)
     const dbResume = {
       user_id: userId,
       title: resume.title,
@@ -91,7 +98,6 @@ export const storage = {
 
     let result;
     if (resume.id && !resume.id.startsWith('temp-')) {
-      // Update
       const { data, error } = await supabase
         .from('resumes')
         .update(dbResume)
@@ -102,7 +108,6 @@ export const storage = {
       if (error) throw error;
       result = data;
     } else {
-      // Insert
       const { data, error } = await supabase
         .from('resumes')
         .insert(dbResume)

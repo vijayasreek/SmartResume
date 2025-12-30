@@ -27,9 +27,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({ type }) => {
       } else {
         await register(data.name, data.email, data.password);
       }
+      // Since we now await the state update in login(), 
+      // this navigation will happen only after user is set.
       navigate('/dashboard');
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || 'Authentication failed');
     } finally {
       setIsLoading(false);
     }
@@ -61,7 +63,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ type }) => {
           <div className="mx-auto h-12 w-12 bg-indigo-600 rounded-xl flex items-center justify-center">
             <FileText className="h-8 w-8 text-white" />
           </div>
-          <h2 className="mt-6 text-3xl font-extrabold text-gray-900">
+          <h2 className="mt-6 text-3xl font-bold text-gray-900">
             {type === 'login' ? 'Welcome back' : 'Create your account'}
           </h2>
           <p className="mt-2 text-sm text-gray-600">
