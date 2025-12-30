@@ -1,516 +1,551 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useForm, useFieldArray } from 'react-hook-form';
-import { useReactToPrint } from 'react-to-print';
-import { Resume, ResumeField, FIELD_SECTIONS } from '../types';
-import { storage } from '../services/storage';
 import { useAuth } from '../context/AuthContext';
+import { storage } from '../services/storage';
 import { aiService } from '../services/gemini';
+import { Resume, ResumeField, ExperienceItem, EducationItem, ProjectItem, FIELD_SECTIONS } from '../types';
 import { ResumePreview } from '../components/ResumePreview';
-import { Button } from '../components/ui/Button';
-import { Input } from '../components/ui/Input';
 import { SkillsSelector } from '../components/SkillsSelector';
 import { ImageUpload } from '../components/ImageUpload';
+import { Button } from '../components/ui/Button';
+import { Input } from '../components/ui/Input';
 import { 
-  Save, Download, Wand2, ChevronRight, ChevronLeft, 
-  Layout, Briefcase, GraduationCap, User, Code, Globe, 
-  Plus, Trash2, ArrowLeft 
+  Save, Download, ArrowLeft, Sparkles, Plus, Trash2, 
+  ChevronRight, ChevronLeft, Layout, User, Briefcase, 
+  GraduationCap, Code, Globe, Loader2, Wand2 
 } from 'lucide-react';
+import { useReactToPrint } from 'react-to-print';
+import { v4 as uuidv4 } from 'uuid';
 
-const TABS = [
+const STEPS = [
   { id: 'personal', label: 'Personal', icon: User },
-  { id: 'experience', label: 'Experience', icon: Briefcase },
+  { id: 'professional', label: 'Professional', icon: Briefcase },
+  { id: 'experience', label: 'Experience', icon: Layout },
   { id: 'education', label: 'Education', icon: GraduationCap },
-  { id: 'projects', label: 'Projects', icon: Code },
-  { id: 'skills', label: 'Skills', icon: Layout },
-  { id: 'languages', label: 'Languages', icon: Globe },
+  { id: 'skills', label: 'Skills', icon: Code },
+  { id: 'projects', label: 'Projects', icon: Globe },
 ];
+
+const INITIAL_RESUME: Resume = {
+  id: '',
+  userId: '',
+  title: 'My Resume',
+  field: 'General',
+  personalInfo: {
+    fullName: '',
+    email: '',
+    phone: '',
+    location: '',
+    website: '',
+    linkedin: '',
+    github: '',
+    summary: '',
+    photoUrl: ''
+  },
+  experience: [],
+  education: [],
+  projects: [],
+  skills: [],
+  languages: [],
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString()
+};
 
 export const ResumeBuilder = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState('personal');
-  const [isAiLoading, setIsAiLoading] = useState(false);
-  const [resumeTitle, setResumeTitle] = useState('My Resume');
-  const [selectedField, setSelectedField] = useState<ResumeField>('General');
+  const [resume, setResume] = useState<Resume>(INITIAL_RESUME);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [activeStep, setActiveStep] = useState(0);
+  const [aiLoading, setAiLoading] = useState(false);
   
   const printRef = useRef<HTMLDivElement>(null);
   const handlePrint = useReactToPrint({
     contentRef: printRef,
-    documentTitle: resumeTitle,
+    documentTitle: resume.personalInfo.fullName || 'Resume',
   });
 
-  const { register, control, handleSubmit, watch, setValue, reset, getValues } = useForm<Resume>({
-    defaultValues: {
-      personalInfo: { fullName: '', email: '', phone: '', location: '', website: '', summary: '' },
-      experience: [],
-      education: [],
-      projects: [],
-      skills: [],
-      languages: [],
-      field: 'General'
-    }
-  });
-
-  const { fields: expFields, append: appendExp, remove: removeExp } = useFieldArray({ control, name: 'experience' });
-  const { fields: eduFields, append: appendEdu, remove: removeEdu } = useFieldArray({ control, name: 'education' });
-  const { fields: projFields, append: appendProj, remove: removeProj } = useFieldArray({ control, name: 'projects' });
-  const { fields: langFields, append: appendLang, remove: removeLang } = useFieldArray({ control, name: 'languages' as any }); // Cast for string array handling
-
-  // Watch for preview
-  const formValues = watch();
-
+  // Load Resume
   useEffect(() => {
-    if (id && id !== 'new') {
-      const existing = storage.getResume(id);
-      if (existing) {
-        reset(existing);
-        setResumeTitle(existing.title);
-        setSelectedField(existing.field);
+    const loadResume = async () => {
+      if (!user) return;
+      
+      if (id && id !== 'new') {
+        try {
+          const data = await storage.getResume(id);
+          if (data) {
+            setResume(data);
+          } else {
+            navigate('/dashboard');
+          }
+        } catch (error) {
+          console.error("Error loading resume:", error);
+        }
+      } else {
+        // New Resume
+        setResume(prev => ({
+          ...prev,
+          userId: user.id,
+          id: `temp-${uuidv4()}`,
+          personalInfo: { ...prev.personalInfo, fullName: user.name, email: user.email }
+        }));
       }
-    } else if (user) {
-      setValue('personalInfo.fullName', user.name);
-      setValue('personalInfo.email', user.email);
-    }
-  }, [id, user, reset, setValue]);
-
-  const onSubmit = (data: Resume) => {
-    if (!user) return;
-    
-    const resumeToSave = {
-      ...data,
-      id: id === 'new' ? Math.random().toString(36).substr(2, 9) : id!,
-      userId: user.id,
-      title: resumeTitle,
-      field: selectedField,
-      languages: data.languages || [] // Ensure languages array exists
+      setLoading(false);
     };
 
-    storage.saveResume(resumeToSave);
-    alert('Resume saved successfully!');
-    if (id === 'new') {
-      navigate(`/edit/${resumeToSave.id}`);
+    loadResume();
+  }, [id, user, navigate]);
+
+  // Save Resume
+  const handleSave = async () => {
+    if (!user) return;
+    setSaving(true);
+    try {
+      const saved = await storage.saveResume(resume, user.id);
+      // If it was a new resume, update URL without reload
+      if (id === 'new' || resume.id.startsWith('temp-')) {
+        window.history.replaceState(null, '', `/edit/${saved.id}`);
+        setResume(saved);
+      }
+    } catch (error) {
+      console.error("Error saving resume:", error);
+      alert("Failed to save resume. Please try again.");
+    } finally {
+      setSaving(false);
     }
   };
 
-  // --- AI Handlers ---
+  // Field Updates
+  const updatePersonalInfo = (field: string, value: string) => {
+    setResume(prev => ({
+      ...prev,
+      personalInfo: { ...prev.personalInfo, [field]: value }
+    }));
+  };
 
-  const handleAiSummary = async () => {
-    const { personalInfo, skills, experience } = getValues();
-    if (!personalInfo.fullName) return alert('Please enter your name first');
-    
-    setIsAiLoading(true);
+  const updateField = (field: ResumeField) => {
+    setResume(prev => ({ ...prev, field }));
+  };
+
+  // Array Updates (Exp, Edu, Proj)
+  const addItem = (section: 'experience' | 'education' | 'projects') => {
+    const newId = uuidv4();
+    const newItem = section === 'experience' 
+      ? { id: newId, company: '', position: '', startDate: '', endDate: '', current: false, description: '' }
+      : section === 'education'
+      ? { id: newId, institution: '', degree: '', fieldOfStudy: '', startDate: '', endDate: '' }
+      : { id: newId, name: '', description: '', link: '', technologies: '' };
+
+    setResume(prev => ({
+      ...prev,
+      [section]: [...prev[section], newItem]
+    }));
+  };
+
+  const updateItem = (section: 'experience' | 'education' | 'projects', id: string, field: string, value: any) => {
+    setResume(prev => ({
+      ...prev,
+      [section]: prev[section].map((item: any) => item.id === id ? { ...item, [field]: value } : item)
+    }));
+  };
+
+  const removeItem = (section: 'experience' | 'education' | 'projects', id: string) => {
+    setResume(prev => ({
+      ...prev,
+      [section]: prev[section].filter((item: any) => item.id !== id)
+    }));
+  };
+
+  // AI Actions
+  const handleGenerateSummary = async () => {
+    setAiLoading(true);
     try {
-      const expText = experience.map(e => `${e.position} at ${e.company}`).join(', ');
       const summary = await aiService.generateSummary(
-        selectedField, 
-        skills, 
-        expText, 
-        selectedField
+        resume.personalInfo.fullName || 'Professional',
+        resume.skills,
+        resume.experience.map(e => e.position).join(', '),
+        resume.field
       );
-      setValue('personalInfo.summary', summary);
-    } catch (e) {
-      console.error(e);
-      alert('AI Generation failed. Please check Settings.');
+      updatePersonalInfo('summary', summary);
+    } catch (error) {
+      alert("AI Generation failed. Please check your settings.");
     } finally {
-      setIsAiLoading(false);
+      setAiLoading(false);
     }
   };
 
-  const handleAiImprove = async (index: number, field: 'experience' | 'projects') => {
-    const item = getValues()[field][index];
-    if (!item.description) return;
-
-    setIsAiLoading(true);
+  const handleImproveBullet = async (expId: string, text: string) => {
+    if (!text) return;
+    setAiLoading(true);
     try {
-      const improved = await aiService.improveBullets(
-        item.description, 
-        field === 'experience' ? (item as any).position : (item as any).name, 
-        selectedField
-      );
-      setValue(`${field}.${index}.description`, improved);
-    } catch (e) {
-      console.error(e);
-      alert('AI Improvement failed.');
+      const improved = await aiService.improveBullets(text, 'Professional', resume.field);
+      updateItem('experience', expId, 'description', improved);
+    } catch (error) {
+      alert("AI Improvement failed.");
     } finally {
-      setIsAiLoading(false);
+      setAiLoading(false);
     }
   };
 
-  const handleFullGeneration = async () => {
-    if (!confirm(`This will overwrite your current Experience, Education, and Skills with a sample ${selectedField} resume. Continue?`)) return;
-    
-    setIsAiLoading(true);
+  const handleAutoFill = async () => {
+    if (!confirm("This will overwrite your current sections with AI generated sample data. Continue?")) return;
+    setAiLoading(true);
     try {
-      const generated = await aiService.generateFromField(selectedField);
-      
-      // Merge generated data but keep personal info (except summary)
-      const currentPersonal = getValues('personalInfo');
-      
-      const newValues = {
-        ...getValues(),
-        personalInfo: {
-          ...currentPersonal,
-          summary: generated.personalInfo.summary
-        },
-        experience: generated.experience,
-        education: generated.education,
-        projects: generated.projects,
+      const generated = await aiService.generateFromField(resume.field);
+      setResume(prev => ({
+        ...prev,
+        personalInfo: { ...prev.personalInfo, summary: generated.personalInfo.summary },
+        experience: generated.experience.map((e: any) => ({ ...e, id: uuidv4() })),
+        education: generated.education.map((e: any) => ({ ...e, id: uuidv4() })),
+        projects: generated.projects.map((e: any) => ({ ...e, id: uuidv4() })),
         skills: generated.skills
-      };
-      
-      reset(newValues);
-    } catch (e) {
-      console.error(e);
-      alert('Generation failed. Please check API Key in Settings.');
+      }));
+    } catch (error) {
+      console.error(error);
+      alert("Auto-fill failed.");
     } finally {
-      setIsAiLoading(false);
+      setAiLoading(false);
     }
   };
 
-  // --- Render Helpers ---
+  if (loading) return <div className="flex justify-center items-center h-screen"><Loader2 className="animate-spin h-8 w-8 text-indigo-600" /></div>;
 
-  const renderTabContent = () => {
-    switch (activeTab) {
-      case 'personal':
-        return (
-          <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
-            <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-100 mb-6">
-              <h3 className="font-semibold text-indigo-900 mb-2">Target Profession</h3>
-              <div className="flex gap-2">
-                <select 
-                  className="flex-1 rounded-md border-indigo-200 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2"
-                  value={selectedField}
-                  onChange={(e) => {
-                    setSelectedField(e.target.value as ResumeField);
-                    setValue('field', e.target.value as ResumeField);
-                  }}
-                >
-                  {Object.keys(FIELD_SECTIONS).map(f => (
-                    <option key={f} value={f}>{f}</option>
-                  ))}
-                </select>
-                <Button 
-                  type="button" 
-                  onClick={handleFullGeneration} 
-                  isLoading={isAiLoading}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white"
-                >
-                  <Wand2 className="h-4 w-4 mr-2" />
-                  Auto-Fill
-                </Button>
-              </div>
-              <p className="text-xs text-indigo-700 mt-2">
-                Select a profession to enable tailored AI suggestions and templates.
-              </p>
-            </div>
+  const CurrentStepIcon = STEPS[activeStep].icon;
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="md:col-span-2">
-                <ImageUpload 
-                  value={watch('personalInfo.photoUrl')} 
-                  onChange={(val) => setValue('personalInfo.photoUrl', val)} 
-                />
-              </div>
-
-              <Input label="Full Name" {...register('personalInfo.fullName')} placeholder="e.g. Jane Doe" />
-              <Input label="Job Title" placeholder={selectedField} disabled value={selectedField} />
-              <Input label="Email" {...register('personalInfo.email')} placeholder="jane@example.com" />
-              <Input label="Phone" {...register('personalInfo.phone')} placeholder="+1 234 567 890" />
-              <Input label="Location" {...register('personalInfo.location')} placeholder="New York, NY" />
-              <Input label="Website" {...register('personalInfo.website')} placeholder="janedoe.com" />
-              <Input label="LinkedIn" {...register('personalInfo.linkedin')} placeholder="linkedin.com/in/jane" />
-              <Input label="GitHub" {...register('personalInfo.github')} placeholder="github.com/jane" />
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <label className="block text-sm font-medium text-gray-700">Professional Summary</label>
-                <Button type="button" size="sm" variant="ghost" onClick={handleAiSummary} isLoading={isAiLoading} className="text-indigo-600">
-                  <Wand2 className="h-3 w-3 mr-1" /> AI Write
-                </Button>
-              </div>
-              <textarea 
-                {...register('personalInfo.summary')}
-                rows={4}
-                className="w-full rounded-md border border-gray-300 p-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                placeholder={`Experienced ${selectedField} with a proven track record in...`}
-              />
-            </div>
+  return (
+    <div className="flex h-screen bg-gray-100 overflow-hidden">
+      {/* LEFT SIDEBAR - EDITOR */}
+      <div className="w-1/2 flex flex-col border-r border-gray-200 bg-white h-full">
+        
+        {/* Toolbar */}
+        <div className="h-16 border-b border-gray-200 flex items-center justify-between px-6 bg-white shrink-0">
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" size="sm" onClick={() => navigate('/dashboard')}>
+              <ArrowLeft className="h-4 w-4 mr-2" /> Back
+            </Button>
+            <h2 className="font-semibold text-gray-900">Editor</h2>
           </div>
-        );
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={handleSave} isLoading={saving}>
+              <Save className="h-4 w-4 mr-2" /> Save
+            </Button>
+            <Button size="sm" onClick={() => handlePrint()}>
+              <Download className="h-4 w-4 mr-2" /> PDF
+            </Button>
+          </div>
+        </div>
 
-      case 'experience':
-        return (
-          <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
-            <div className="flex justify-between items-center">
-              <h3 className="text-lg font-medium text-gray-900">
-                {FIELD_SECTIONS[selectedField]?.experience || 'Work Experience'}
-              </h3>
-              <Button type="button" size="sm" onClick={() => appendExp({ company: '', position: '', startDate: '', endDate: '', current: false, description: '', id: '' })}>
-                <Plus className="h-4 w-4 mr-2" /> Add Position
-              </Button>
-            </div>
-
-            {expFields.map((field, index) => (
-              <div key={field.id} className="bg-gray-50 p-4 rounded-lg border border-gray-200 space-y-4 relative group">
+        {/* Progress Steps */}
+        <div className="px-2 py-4 bg-gray-50 border-b border-gray-200 overflow-x-auto shrink-0">
+          <div className="flex justify-center space-x-2 min-w-max px-4">
+            {STEPS.map((step, idx) => {
+              const Icon = step.icon;
+              const isActive = activeStep === idx;
+              const isCompleted = activeStep > idx;
+              return (
                 <button
-                  type="button"
-                  onClick={() => removeExp(index)}
-                  className="absolute top-2 right-2 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                  key={step.id}
+                  onClick={() => setActiveStep(idx)}
+                  className={`flex items-center px-3 py-2 rounded-full text-sm font-medium transition-colors ${
+                    isActive 
+                      ? 'bg-indigo-600 text-white shadow-sm' 
+                      : isCompleted 
+                        ? 'bg-indigo-50 text-indigo-700' 
+                        : 'text-gray-500 hover:bg-gray-100'
+                  }`}
                 >
-                  <Trash2 className="h-4 w-4" />
+                  <Icon className={`h-4 w-4 mr-2 ${isActive ? 'text-white' : ''}`} />
+                  {step.label}
                 </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Scrollable Form Area */}
+        <div className="flex-1 overflow-y-auto p-6 scrollbar-thin">
+          <div className="max-w-2xl mx-auto space-y-6 pb-20">
+            
+            {/* STEP 1: PERSONAL */}
+            {activeStep === 0 && (
+              <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
+                <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-100 flex items-start gap-3">
+                  <User className="h-5 w-5 text-indigo-600 mt-0.5" />
+                  <div>
+                    <h3 className="font-medium text-indigo-900">Personal Details</h3>
+                    <p className="text-sm text-indigo-700">Start with your basic contact information and a professional photo.</p>
+                  </div>
+                </div>
+
+                <ImageUpload 
+                  value={resume.personalInfo.photoUrl} 
+                  onChange={(url) => updatePersonalInfo('photoUrl', url)} 
+                />
 
                 <div className="grid grid-cols-2 gap-4">
-                  <Input label="Company / Organization" {...register(`experience.${index}.company`)} />
-                  <Input label="Position / Role" {...register(`experience.${index}.position`)} />
-                  <Input label="Start Date" type="month" {...register(`experience.${index}.startDate`)} />
-                  <div className="flex gap-2 items-end">
-                    <Input label="End Date" type="month" {...register(`experience.${index}.endDate`)} disabled={watch(`experience.${index}.current`)} />
-                    <div className="pb-3 flex items-center">
-                      <input type="checkbox" {...register(`experience.${index}.current`)} className="mr-2" />
-                      <span className="text-sm text-gray-600">Current</span>
-                    </div>
+                  <Input label="Full Name" value={resume.personalInfo.fullName} onChange={e => updatePersonalInfo('fullName', e.target.value)} placeholder="e.g. Jane Doe" />
+                  <Input label="Job Title" value={resume.title} onChange={e => setResume(prev => ({ ...prev, title: e.target.value }))} placeholder="e.g. Senior Developer" />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <Input label="Email" value={resume.personalInfo.email} onChange={e => updatePersonalInfo('email', e.target.value)} />
+                  <Input label="Phone" value={resume.personalInfo.phone} onChange={e => updatePersonalInfo('phone', e.target.value)} placeholder="+1 234 567 890" />
+                </div>
+                <Input label="Location" value={resume.personalInfo.location} onChange={e => updatePersonalInfo('location', e.target.value)} placeholder="City, Country" />
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <Input label="LinkedIn URL" value={resume.personalInfo.linkedin} onChange={e => updatePersonalInfo('linkedin', e.target.value)} placeholder="linkedin.com/in/..." />
+                  <Input label="Portfolio / Website" value={resume.personalInfo.website} onChange={e => updatePersonalInfo('website', e.target.value)} placeholder="mysite.com" />
+                </div>
+
+                {/* Languages Section - Added here for convenience */}
+                <div className="pt-4 border-t border-gray-200">
+                  <h3 className="text-sm font-medium text-gray-700 mb-3">Languages</h3>
+                  <SkillsSelector 
+                    field="General" // Generic for languages
+                    selectedSkills={resume.languages || []} 
+                    onChange={(langs) => setResume(prev => ({ ...prev, languages: langs }))}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Type a language and press Enter (e.g. "English", "Spanish")</p>
+                </div>
+              </div>
+            )}
+
+            {/* STEP 2: PROFESSIONAL */}
+            {activeStep === 1 && (
+              <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
+                <div className="bg-purple-50 p-4 rounded-lg border border-purple-100">
+                  <h3 className="font-medium text-purple-900 flex items-center gap-2">
+                    <Sparkles className="h-4 w-4" /> Target Profession
+                  </h3>
+                  <p className="text-sm text-purple-700 mb-3">Select your field to get tailored AI suggestions and structure.</p>
+                  
+                  <div className="flex gap-2">
+                    <select 
+                      className="flex-1 rounded-md border border-gray-300 p-2 text-sm focus:ring-2 focus:ring-purple-500"
+                      value={resume.field}
+                      onChange={(e) => updateField(e.target.value as ResumeField)}
+                    >
+                      {Object.keys(FIELD_SECTIONS).map(f => (
+                        <option key={f} value={f}>{f}</option>
+                      ))}
+                    </select>
+                    <Button variant="secondary" onClick={handleAutoFill} isLoading={aiLoading} title="Auto-fill sample content">
+                      <Wand2 className="h-4 w-4 mr-2" /> Auto-Fill
+                    </Button>
                   </div>
                 </div>
 
                 <div className="space-y-2">
                   <div className="flex justify-between items-center">
-                    <label className="text-sm font-medium text-gray-700">Description (Bullet Points)</label>
-                    <Button type="button" size="sm" variant="ghost" onClick={() => handleAiImprove(index, 'experience')} isLoading={isAiLoading} className="text-indigo-600">
-                      <Wand2 className="h-3 w-3 mr-1" /> AI Improve
+                    <label className="text-sm font-medium text-gray-700">Professional Summary</label>
+                    <Button variant="ghost" size="sm" onClick={handleGenerateSummary} isLoading={aiLoading} className="text-indigo-600">
+                      <Sparkles className="h-3 w-3 mr-1" /> AI Write
                     </Button>
                   </div>
                   <textarea 
-                    {...register(`experience.${index}.description`)}
-                    rows={4}
-                    className="w-full rounded-md border border-gray-300 p-2 text-sm"
-                    placeholder="• Led a team of..."
+                    className="w-full h-32 rounded-md border border-gray-300 p-3 text-sm focus:ring-2 focus:ring-indigo-500"
+                    value={resume.personalInfo.summary}
+                    onChange={e => updatePersonalInfo('summary', e.target.value)}
+                    placeholder="Briefly describe your professional background and goals..."
                   />
                 </div>
               </div>
-            ))}
-            {expFields.length === 0 && <p className="text-center text-gray-500 py-8">No experience added yet.</p>}
-          </div>
-        );
+            )}
 
-      case 'education':
-        return (
-          <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
-             <div className="flex justify-between items-center">
-              <h3 className="text-lg font-medium text-gray-900">Education</h3>
-              <Button type="button" size="sm" onClick={() => appendEdu({ institution: '', degree: '', fieldOfStudy: '', startDate: '', endDate: '', id: '' })}>
-                <Plus className="h-4 w-4 mr-2" /> Add Education
-              </Button>
-            </div>
-
-            {eduFields.map((field, index) => (
-              <div key={field.id} className="bg-gray-50 p-4 rounded-lg border border-gray-200 space-y-4 relative group">
-                <button type="button" onClick={() => removeEdu(index)} className="absolute top-2 right-2 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100">
-                  <Trash2 className="h-4 w-4" />
-                </button>
-                <div className="grid grid-cols-2 gap-4">
-                  <Input label="Institution / University" {...register(`education.${index}.institution`)} />
-                  <Input label="Degree" {...register(`education.${index}.degree`)} placeholder="e.g. Bachelor of Science" />
-                  <Input label="Field of Study" {...register(`education.${index}.fieldOfStudy`)} />
-                  <div className="grid grid-cols-2 gap-2">
-                    <Input label="Start Year" {...register(`education.${index}.startDate`)} placeholder="2018" />
-                    <Input label="End Year" {...register(`education.${index}.endDate`)} placeholder="2022" />
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        );
-
-      case 'projects':
-        return (
-          <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
-             <div className="flex justify-between items-center">
-              <h3 className="text-lg font-medium text-gray-900">Projects & Certifications</h3>
-              <Button type="button" size="sm" onClick={() => appendProj({ name: '', description: '', link: '', technologies: '', id: '' })}>
-                <Plus className="h-4 w-4 mr-2" /> Add Item
-              </Button>
-            </div>
-
-            {projFields.map((field, index) => (
-              <div key={field.id} className="bg-gray-50 p-4 rounded-lg border border-gray-200 space-y-4 relative group">
-                <button type="button" onClick={() => removeProj(index)} className="absolute top-2 right-2 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100">
-                  <Trash2 className="h-4 w-4" />
-                </button>
-                <Input label="Project / Certificate Name" {...register(`projects.${index}.name`)} />
-                <Input label="Link (Optional)" {...register(`projects.${index}.link`)} placeholder="https://..." />
-                <Input label="Tools / Technologies Used" {...register(`projects.${index}.technologies`)} placeholder="e.g. React, Python, Figma" />
-                <div className="space-y-2">
-                   <div className="flex justify-between items-center">
-                    <label className="text-sm font-medium text-gray-700">Description</label>
-                    <Button type="button" size="sm" variant="ghost" onClick={() => handleAiImprove(index, 'projects')} isLoading={isAiLoading} className="text-indigo-600">
-                      <Wand2 className="h-3 w-3 mr-1" /> AI Improve
+            {/* STEP 3: EXPERIENCE */}
+            {activeStep === 2 && (
+              <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
+                 <div className="flex justify-between items-center">
+                    <h3 className="text-lg font-medium text-gray-900">
+                      {FIELD_SECTIONS[resume.field]?.experience || 'Experience'}
+                    </h3>
+                    <Button size="sm" variant="outline" onClick={() => addItem('experience')}>
+                      <Plus className="h-4 w-4 mr-2" /> Add Position
                     </Button>
-                  </div>
-                  <textarea 
-                    {...register(`projects.${index}.description`)}
-                    rows={3}
-                    className="w-full rounded-md border border-gray-300 p-2 text-sm"
-                  />
-                </div>
+                 </div>
+
+                 {resume.experience.map((exp, index) => (
+                   <div key={exp.id} className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm relative group">
+                     <button 
+                        onClick={() => removeItem('experience', exp.id)}
+                        className="absolute top-4 right-4 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                     >
+                       <Trash2 className="h-4 w-4" />
+                     </button>
+                     
+                     <div className="grid grid-cols-2 gap-4 mb-3">
+                       <Input label="Position / Role" value={exp.position} onChange={e => updateItem('experience', exp.id, 'position', e.target.value)} />
+                       <Input label="Company / Organization" value={exp.company} onChange={e => updateItem('experience', exp.id, 'company', e.target.value)} />
+                     </div>
+                     
+                     <div className="grid grid-cols-2 gap-4 mb-3">
+                       <Input label="Start Date" type="month" value={exp.startDate} onChange={e => updateItem('experience', exp.id, 'startDate', e.target.value)} />
+                       <div className="flex items-end gap-2">
+                         {!exp.current && (
+                           <Input label="End Date" type="month" value={exp.endDate} onChange={e => updateItem('experience', exp.id, 'endDate', e.target.value)} />
+                         )}
+                         <label className="flex items-center mb-3 text-sm text-gray-600 cursor-pointer">
+                           <input 
+                              type="checkbox" 
+                              checked={exp.current} 
+                              onChange={e => updateItem('experience', exp.id, 'current', e.target.checked)}
+                              className="mr-2 rounded text-indigo-600 focus:ring-indigo-500" 
+                            />
+                           Current
+                         </label>
+                       </div>
+                     </div>
+
+                     <div className="space-y-2">
+                        <div className="flex justify-between">
+                          <label className="text-xs font-medium text-gray-500">Description (Bullet points)</label>
+                          <button 
+                            onClick={() => handleImproveBullet(exp.id, exp.description)}
+                            className="text-xs text-indigo-600 flex items-center hover:underline"
+                            disabled={aiLoading}
+                          >
+                            <Sparkles className="h-3 w-3 mr-1" /> Improve with AI
+                          </button>
+                        </div>
+                        <textarea 
+                          className="w-full h-24 rounded-md border border-gray-300 p-2 text-sm"
+                          value={exp.description}
+                          onChange={e => updateItem('experience', exp.id, 'description', e.target.value)}
+                          placeholder="• Achieved X by doing Y..."
+                        />
+                     </div>
+                   </div>
+                 ))}
+                 
+                 {resume.experience.length === 0 && (
+                   <div className="text-center py-8 text-gray-500 bg-gray-50 rounded-lg border-2 border-dashed border-gray-200">
+                     No experience added yet.
+                   </div>
+                 )}
               </div>
-            ))}
-          </div>
-        );
+            )}
 
-      case 'skills':
-        return (
-          <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
-            <h3 className="text-lg font-medium text-gray-900">Skills</h3>
-            <p className="text-sm text-gray-500">Select skills relevant to <strong>{selectedField}</strong> or add your own.</p>
-            
-            <SkillsSelector 
-              field={selectedField}
-              selectedSkills={watch('skills')}
-              onChange={(newSkills) => setValue('skills', newSkills)}
-            />
-          </div>
-        );
+            {/* STEP 4: EDUCATION */}
+            {activeStep === 3 && (
+              <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
+                 <div className="flex justify-between items-center">
+                    <h3 className="text-lg font-medium text-gray-900">Education</h3>
+                    <Button size="sm" variant="outline" onClick={() => addItem('education')}>
+                      <Plus className="h-4 w-4 mr-2" /> Add Education
+                    </Button>
+                 </div>
 
-      case 'languages':
-        return (
-          <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
-            <div className="flex justify-between items-center">
-              <h3 className="text-lg font-medium text-gray-900">Languages</h3>
-              <Button type="button" size="sm" onClick={() => appendLang('English')}>
-                <Plus className="h-4 w-4 mr-2" /> Add Language
-              </Button>
-            </div>
-            
-            <div className="space-y-3">
-              {/* Note: React Hook Form Field Array with primitive strings is tricky, 
-                  so we map over the watch value or controlled fields carefully */}
-              {watch('languages')?.map((lang, index) => (
-                <div key={index} className="flex gap-2">
-                  <Input 
-                    {...register(`languages.${index}` as const)} 
-                    placeholder="e.g. English (Native)" 
-                  />
-                  <Button 
-                    type="button" 
-                    variant="ghost" 
-                    onClick={() => {
-                        const current = getValues('languages');
-                        setValue('languages', current.filter((_, i) => i !== index));
-                    }}
-                    className="text-red-500 hover:bg-red-50"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                 {resume.education.map((edu) => (
+                   <div key={edu.id} className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm relative group">
+                     <button 
+                        onClick={() => removeItem('education', edu.id)}
+                        className="absolute top-4 right-4 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                     >
+                       <Trash2 className="h-4 w-4" />
+                     </button>
+                     
+                     <div className="grid grid-cols-2 gap-4 mb-3">
+                       <Input label="School / University" value={edu.institution} onChange={e => updateItem('education', edu.id, 'institution', e.target.value)} />
+                       <Input label="Degree" value={edu.degree} onChange={e => updateItem('education', edu.id, 'degree', e.target.value)} />
+                     </div>
+                     <div className="grid grid-cols-2 gap-4">
+                       <Input label="Field of Study" value={edu.fieldOfStudy} onChange={e => updateItem('education', edu.id, 'fieldOfStudy', e.target.value)} />
+                       <div className="grid grid-cols-2 gap-2">
+                          <Input label="Start Year" value={edu.startDate} onChange={e => updateItem('education', edu.id, 'startDate', e.target.value)} placeholder="2018" />
+                          <Input label="End Year" value={edu.endDate} onChange={e => updateItem('education', edu.id, 'endDate', e.target.value)} placeholder="2022" />
+                       </div>
+                     </div>
+                   </div>
+                 ))}
+              </div>
+            )}
+
+            {/* STEP 5: SKILLS */}
+            {activeStep === 4 && (
+              <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
+                <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-100">
+                  <h3 className="font-medium text-indigo-900">Skills & Expertise</h3>
+                  <p className="text-sm text-indigo-700">Add skills relevant to <strong>{resume.field}</strong>. We've suggested some for you below.</p>
                 </div>
-              ))}
-              {(!watch('languages') || watch('languages').length === 0) && (
-                 <p className="text-center text-gray-500 py-4">No languages added.</p>
-              )}
-            </div>
+
+                <SkillsSelector 
+                  field={resume.field} 
+                  selectedSkills={resume.skills} 
+                  onChange={(skills) => setResume(prev => ({ ...prev, skills }))} 
+                />
+              </div>
+            )}
+
+            {/* STEP 6: PROJECTS */}
+            {activeStep === 5 && (
+              <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
+                 <div className="flex justify-between items-center">
+                    <h3 className="text-lg font-medium text-gray-900">Projects & Certifications</h3>
+                    <Button size="sm" variant="outline" onClick={() => addItem('projects')}>
+                      <Plus className="h-4 w-4 mr-2" /> Add Project
+                    </Button>
+                 </div>
+
+                 {resume.projects.map((proj) => (
+                   <div key={proj.id} className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm relative group">
+                     <button 
+                        onClick={() => removeItem('projects', proj.id)}
+                        className="absolute top-4 right-4 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                     >
+                       <Trash2 className="h-4 w-4" />
+                     </button>
+                     
+                     <Input label="Project Name" value={proj.name} onChange={e => updateItem('projects', proj.id, 'name', e.target.value)} className="mb-3" />
+                     <Input label="Link (Optional)" value={proj.link} onChange={e => updateItem('projects', proj.id, 'link', e.target.value)} className="mb-3" />
+                     <Input label="Technologies / Tools" value={proj.technologies} onChange={e => updateItem('projects', proj.id, 'technologies', e.target.value)} className="mb-3" />
+                     
+                     <div className="space-y-1">
+                        <label className="text-sm font-medium text-gray-700">Description</label>
+                        <textarea 
+                          className="w-full h-20 rounded-md border border-gray-300 p-2 text-sm"
+                          value={proj.description}
+                          onChange={e => updateItem('projects', proj.id, 'description', e.target.value)}
+                        />
+                     </div>
+                   </div>
+                 ))}
+              </div>
+            )}
+
           </div>
-        );
-
-      default:
-        return null;
-    }
-  };
-
-  return (
-    <div className="h-[calc(100vh-4rem)] flex flex-col md:flex-row overflow-hidden bg-gray-100">
-      
-      {/* LEFT SIDEBAR: Navigation & Form */}
-      <div className="w-full md:w-[450px] lg:w-[500px] bg-white border-r border-gray-200 flex flex-col h-full shadow-xl z-10">
-        
-        {/* Header */}
-        <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-white">
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="sm" onClick={() => navigate('/dashboard')} className="p-2">
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-            <input 
-              type="text" 
-              value={resumeTitle}
-              onChange={(e) => setResumeTitle(e.target.value)}
-              className="font-semibold text-gray-900 bg-transparent border-none focus:ring-0 p-0 w-48 truncate"
-            />
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={handleSubmit(onSubmit)}>
-              <Save className="h-4 w-4 md:mr-2" /> <span className="hidden md:inline">Save</span>
-            </Button>
-          </div>
-        </div>
-
-        {/* Tab Navigation */}
-        <div className="flex overflow-x-auto border-b border-gray-200 scrollbar-hide">
-          {TABS.map(tab => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex-1 flex flex-col items-center justify-center py-3 px-2 min-w-[4.5rem] border-b-2 transition-colors ${
-                  isActive ? 'border-indigo-600 text-indigo-600 bg-indigo-50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-                }`}
-              >
-                <Icon className={`h-5 w-5 mb-1 ${isActive ? 'text-indigo-600' : 'text-gray-400'}`} />
-                <span className="text-[10px] font-medium uppercase tracking-wide">{tab.label}</span>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Form Content Area */}
-        <div className="flex-1 overflow-y-auto p-6 bg-white">
-          {renderTabContent()}
         </div>
 
         {/* Footer Navigation */}
-        <div className="p-4 border-t border-gray-200 bg-gray-50 flex justify-between">
+        <div className="h-16 border-t border-gray-200 bg-white px-6 flex items-center justify-between shrink-0">
           <Button 
             variant="ghost" 
-            disabled={activeTab === 'personal'}
-            onClick={() => {
-              const idx = TABS.findIndex(t => t.id === activeTab);
-              if (idx > 0) setActiveTab(TABS[idx - 1].id);
-            }}
+            onClick={() => setActiveStep(Math.max(0, activeStep - 1))}
+            disabled={activeStep === 0}
           >
-            <ChevronLeft className="h-4 w-4 mr-2" /> Back
+            <ChevronLeft className="h-4 w-4 mr-2" /> Previous
           </Button>
+          
+          <div className="text-sm text-gray-500">
+            Step {activeStep + 1} of {STEPS.length}
+          </div>
+
           <Button 
-            disabled={activeTab === 'languages'}
-            onClick={() => {
-              const idx = TABS.findIndex(t => t.id === activeTab);
-              if (idx < TABS.length - 1) setActiveTab(TABS[idx + 1].id);
-            }}
+            onClick={() => setActiveStep(Math.min(STEPS.length - 1, activeStep + 1))}
+            disabled={activeStep === STEPS.length - 1}
           >
             Next <ChevronRight className="h-4 w-4 ml-2" />
           </Button>
         </div>
       </div>
 
-      {/* RIGHT AREA: Live Preview */}
-      <div className="flex-1 bg-gray-500/10 overflow-hidden flex flex-col relative">
-        {/* Toolbar */}
-        <div className="absolute top-4 right-4 z-20 flex gap-2">
-           <Button onClick={handlePrint} className="shadow-lg bg-gray-900 text-white hover:bg-black">
-             <Download className="h-4 w-4 mr-2" /> Download PDF
-           </Button>
-        </div>
-
-        {/* Zoomable Preview Container */}
-        <div className="flex-1 overflow-auto p-8 flex justify-center items-start">
-          <div className="transform scale-[0.6] sm:scale-[0.7] md:scale-[0.8] lg:scale-[0.85] origin-top transition-transform duration-200">
-            <ResumePreview resume={{ ...formValues, field: selectedField } as Resume} ref={printRef} />
-          </div>
+      {/* RIGHT PREVIEW */}
+      <div className="w-1/2 bg-gray-500 overflow-y-auto p-8 flex justify-center items-start shadow-inner">
+        <div className="transform scale-[0.85] origin-top shadow-2xl">
+          <ResumePreview resume={resume} ref={printRef} />
         </div>
       </div>
-
     </div>
   );
 };

@@ -1,70 +1,140 @@
-import { User, Resume } from '../types';
-
-// Mock Database using LocalStorage
-const USERS_KEY = 'srb_users';
-const RESUMES_KEY = 'srb_resumes';
-const SESSION_KEY = 'srb_session';
+import { supabase } from '../lib/supabase';
+import { Resume, User } from '../types';
 
 export const storage = {
-  getUsers: (): User[] => {
-    const data = localStorage.getItem(USERS_KEY);
-    return data ? JSON.parse(data) : [];
+  // --- Auth & User ---
+  getCurrentUser: async (): Promise<User | null> => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) return null;
+
+    // Fetch profile to get the name
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('name, email')
+      .eq('id', session.user.id)
+      .single();
+
+    return {
+      id: session.user.id,
+      email: session.user.email!,
+      name: profile?.name || session.user.user_metadata?.name || 'User',
+    };
   },
 
-  saveUser: (user: User) => {
-    const users = storage.getUsers();
-    users.push(user);
-    localStorage.setItem(USERS_KEY, JSON.stringify(users));
-  },
+  // --- Resumes ---
+  getResumes: async (userId: string): Promise<Resume[]> => {
+    const { data, error } = await supabase
+      .from('resumes')
+      .select('*')
+      .eq('user_id', userId)
+      .order('updated_at', { ascending: false });
 
-  findUserByEmail: (email: string) => {
-    const users = storage.getUsers();
-    return users.find(u => u.email === email);
-  },
-
-  login: (user: User) => {
-    localStorage.setItem(SESSION_KEY, JSON.stringify(user));
-  },
-
-  logout: () => {
-    localStorage.removeItem(SESSION_KEY);
-  },
-
-  getCurrentUser: (): User | null => {
-    const data = localStorage.getItem(SESSION_KEY);
-    return data ? JSON.parse(data) : null;
-  },
-
-  getResumes: (userId: string): Resume[] => {
-    const data = localStorage.getItem(RESUMES_KEY);
-    const allResumes: Resume[] = data ? JSON.parse(data) : [];
-    return allResumes.filter(r => r.userId === userId).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-  },
-
-  getResume: (id: string): Resume | undefined => {
-    const data = localStorage.getItem(RESUMES_KEY);
-    const allResumes: Resume[] = data ? JSON.parse(data) : [];
-    return allResumes.find(r => r.id === id);
-  },
-
-  saveResume: (resume: Resume) => {
-    const data = localStorage.getItem(RESUMES_KEY);
-    let allResumes: Resume[] = data ? JSON.parse(data) : [];
+    if (error) throw error;
     
-    const index = allResumes.findIndex(r => r.id === resume.id);
-    if (index >= 0) {
-      allResumes[index] = { ...resume, updatedAt: new Date().toISOString() };
+    // Map DB snake_case to camelCase if needed, but we stored JSONB so structure is preserved
+    // However, top level fields like user_id need mapping
+    return (data || []).map((r: any) => ({
+      id: r.id,
+      userId: r.user_id,
+      title: r.title,
+      field: r.field,
+      personalInfo: r.personal_info,
+      experience: r.experience,
+      education: r.education,
+      projects: r.projects,
+      skills: r.skills,
+      languages: r.languages,
+      createdAt: r.created_at,
+      updatedAt: r.updated_at
+    }));
+  },
+
+  getResume: async (id: string): Promise<Resume | null> => {
+    const { data, error } = await supabase
+      .from('resumes')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error) return null;
+
+    return {
+      id: data.id,
+      userId: data.user_id,
+      title: data.title,
+      field: data.field,
+      personalInfo: data.personal_info,
+      experience: data.experience,
+      education: data.education,
+      projects: data.projects,
+      skills: data.skills,
+      languages: data.languages,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at
+    };
+  },
+
+  saveResume: async (resume: Resume, userId: string): Promise<Resume> => {
+    // Prepare object for DB (snake_case columns)
+    const dbResume = {
+      user_id: userId,
+      title: resume.title,
+      field: resume.field,
+      personal_info: resume.personalInfo,
+      experience: resume.experience,
+      education: resume.education,
+      projects: resume.projects,
+      skills: resume.skills,
+      languages: resume.languages,
+      updated_at: new Date().toISOString()
+    };
+
+    let result;
+    if (resume.id && !resume.id.startsWith('temp-')) {
+      // Update
+      const { data, error } = await supabase
+        .from('resumes')
+        .update(dbResume)
+        .eq('id', resume.id)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      result = data;
     } else {
-      allResumes.push({ ...resume, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+      // Insert
+      const { data, error } = await supabase
+        .from('resumes')
+        .insert(dbResume)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      result = data;
     }
-    
-    localStorage.setItem(RESUMES_KEY, JSON.stringify(allResumes));
+
+    return {
+      id: result.id,
+      userId: result.user_id,
+      title: result.title,
+      field: result.field,
+      personalInfo: result.personal_info,
+      experience: result.experience,
+      education: result.education,
+      projects: result.projects,
+      skills: result.skills,
+      languages: result.languages,
+      createdAt: result.created_at,
+      updatedAt: result.updated_at
+    };
   },
 
-  deleteResume: (id: string) => {
-    const data = localStorage.getItem(RESUMES_KEY);
-    let allResumes: Resume[] = data ? JSON.parse(data) : [];
-    allResumes = allResumes.filter(r => r.id !== id);
-    localStorage.setItem(RESUMES_KEY, JSON.stringify(allResumes));
+  deleteResume: async (id: string) => {
+    const { error } = await supabase
+      .from('resumes')
+      .delete()
+      .eq('id', id);
+    
+    if (error) throw error;
   }
 };

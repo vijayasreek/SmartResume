@@ -2,7 +2,7 @@ export interface User {
   id: string;
   name: string;
   email: string;
-  passwordHash: string;
+  // passwordHash removed as Supabase handles auth securely
 }
 
 export interface Resume {
@@ -19,12 +19,12 @@ export interface Resume {
     linkedin: string;
     github: string;
     summary: string;
-    photoUrl?: string; // New field for profile image
+    photoUrl?: string;
   };
   experience: ExperienceItem[];
   education: EducationItem[];
   skills: string[];
-  languages: string[]; // New field
+  languages: string[];
   projects: ProjectItem[];
   createdAt: string;
   updatedAt: string;

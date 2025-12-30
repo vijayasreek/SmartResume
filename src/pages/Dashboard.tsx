@@ -4,39 +4,67 @@ import { useAuth } from '../context/AuthContext';
 import { storage } from '../services/storage';
 import { Resume } from '../types';
 import { Button } from '../components/ui/Button';
-import { Plus, FileText, Trash2, Copy, Edit, Download } from 'lucide-react';
+import { Plus, FileText, Trash2, Copy, Edit, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export const Dashboard = () => {
   const { user } = useAuth();
   const [resumes, setResumes] = useState<Resume[]>([]);
+  const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (user) {
-      setResumes(storage.getResumes(user.id));
-    }
+    const fetchResumes = async () => {
+      if (user) {
+        try {
+          const data = await storage.getResumes(user.id);
+          setResumes(data);
+        } catch (error) {
+          console.error("Failed to fetch resumes", error);
+        } finally {
+          setLoading(false);
+        }
+      }
+    };
+    fetchResumes();
   }, [user]);
 
-  const handleDelete = (id: string, e: React.MouseEvent) => {
+  const handleDelete = async (id: string, e: React.MouseEvent) => {
     e.preventDefault();
     if (confirm('Are you sure you want to delete this resume?')) {
-      storage.deleteResume(id);
-      setResumes(prev => prev.filter(r => r.id !== id));
+      try {
+        await storage.deleteResume(id);
+        setResumes(prev => prev.filter(r => r.id !== id));
+      } catch (error) {
+        alert("Failed to delete resume");
+      }
     }
   };
 
-  const handleDuplicate = (resume: Resume, e: React.MouseEvent) => {
+  const handleDuplicate = async (resume: Resume, e: React.MouseEvent) => {
     e.preventDefault();
-    const newResume = {
-      ...resume,
-      id: Math.random().toString(36).substr(2, 9),
-      title: `${resume.title} (Copy)`,
-      updatedAt: new Date().toISOString()
-    };
-    storage.saveResume(newResume);
-    if (user) setResumes(storage.getResumes(user.id));
+    if (!user) return;
+
+    try {
+      const newResume = {
+        ...resume,
+        id: '', // Empty ID tells storage to create new
+        title: `${resume.title} (Copy)`,
+      };
+      const saved = await storage.saveResume(newResume, user.id);
+      setResumes(prev => [saved, ...prev]);
+    } catch (error) {
+      alert("Failed to duplicate resume");
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-[calc(100vh-4rem)]">
+        <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">

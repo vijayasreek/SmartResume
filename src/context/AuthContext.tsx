@@ -1,12 +1,13 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User } from '../types';
+import { supabase } from '../lib/supabase';
 import { storage } from '../services/storage';
 
 interface AuthContextType {
   user: User | null;
   login: (email: string, pass: string) => Promise<void>;
   register: (name: string, email: string, pass: string) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
   loading: boolean;
 }
 
@@ -17,43 +18,56 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const currentUser = storage.getCurrentUser();
-    setUser(currentUser);
-    setLoading(false);
+    // Check active session
+    const checkSession = async () => {
+      try {
+        const currentUser = await storage.getCurrentUser();
+        setUser(currentUser);
+      } catch (error) {
+        console.error("Session check failed", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    checkSession();
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        const currentUser = await storage.getCurrentUser();
+        setUser(currentUser);
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null);
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   const login = async (email: string, pass: string) => {
-    // Simulate network delay for better UX feel
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    const existingUser = storage.findUserByEmail(email);
-    if (existingUser && existingUser.passwordHash === pass) {
-      storage.login(existingUser);
-      setUser(existingUser);
-    } else {
-      throw new Error('Invalid credentials. Please check your email/password or Register a new account.');
-    }
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password: pass,
+    });
+    if (error) throw error;
   };
 
   const register = async (name: string, email: string, pass: string) => {
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    if (storage.findUserByEmail(email)) {
-      throw new Error('Email already exists. Please login instead.');
-    }
-    const newUser: User = {
-      id: Math.random().toString(36).substr(2, 9),
-      name,
+    const { error } = await supabase.auth.signUp({
       email,
-      passwordHash: pass, // In real app, hash this!
-    };
-    storage.saveUser(newUser);
-    storage.login(newUser);
-    setUser(newUser);
+      password: pass,
+      options: {
+        data: { name }, // Stored in user_metadata
+      },
+    });
+    if (error) throw error;
   };
 
-  const logout = () => {
-    storage.logout();
+  const logout = async () => {
+    await supabase.auth.signOut();
     setUser(null);
   };
 
