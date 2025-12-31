@@ -1,3 +1,57 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer utilities {
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+/* Print Styles */
+@media print {
+  @page {
+    margin: 0;
+    size: auto; /* Let the content define the size */
+  }
+  
+  body {
+    margin: 0;
+    padding: 0;
+    background: white;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* 
+     CRITICAL FIX: 
+     Do NOT hide body children globally. 
+     React-to-print creates a new window/iframe where the resume is the body's direct child.
+     Hiding body > * hides the resume!
+  */
+
+  /* Ensure the resume preview container is visible and resets any potential hidden states */
+  #resume-preview {
+    display: block !important;
+    visibility: visible !important;
+    width: 100% !important;
+    height: auto !important;
+    position: relative !important;
+    box-shadow: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    background: white !important;
+  }
+
+  /* If printing via Browser Ctrl+P (not the button), we need to hide the UI */
+  body > #root {
+    display: none !important;
+  }
+  
+  /* However, if we are in the react-to-print iframe, #root doesn't exist, so the above rule is safe. */
+}

@@ -102,13 +102,16 @@ export const FIELD_SECTIONS: Record<ResumeField, { experience: string }> = {
 };
 
 export const TEMPLATES = [
-  { id: 'modern', name: 'Modern', description: 'Clean sidebar layout, perfect for most professionals.', thumbnail: 'https://img-wrapper.vercel.app/image?url=https://placehold.co/300x400/e0e7ff/4f46e5?text=Modern' },
-  { id: 'minimalist', name: 'Minimalist', description: 'Simple, single-column, ATS-friendly design.', thumbnail: 'https://img-wrapper.vercel.app/image?url=https://placehold.co/300x400/ffffff/333333?text=Minimalist' },
-  { id: 'executive', name: 'Executive', description: 'Traditional, serif fonts, authoritative look.', thumbnail: 'https://img-wrapper.vercel.app/image?url=https://placehold.co/300x400/f8f9fa/2c3e50?text=Executive' },
-  { id: 'creative', name: 'Creative', description: 'Bold header and colors for creative roles.', thumbnail: 'https://img-wrapper.vercel.app/image?url=https://placehold.co/300x400/fff0f5/db2777?text=Creative' },
-  { id: 'tech', name: 'Tech', description: 'Right sidebar with technical accents.', thumbnail: 'https://img-wrapper.vercel.app/image?url=https://placehold.co/300x400/1e293b/60a5fa?text=Tech' },
-  { id: 'professional', name: 'Professional', description: 'Balanced layout with subtle borders.', thumbnail: 'https://img-wrapper.vercel.app/image?url=https://placehold.co/300x400/f0fdf4/166534?text=Professional' },
-  { id: 'academic', name: 'Academic', description: 'Education-focused, classic layout for researchers.', thumbnail: 'https://img-wrapper.vercel.app/image?url=https://placehold.co/300x400/fff/000?text=Academic' },
-  { id: 'healthcare', name: 'Healthcare', description: 'Clean, clinical blue accents for medical pros.', thumbnail: 'https://img-wrapper.vercel.app/image?url=https://placehold.co/300x400/e0f2fe/0284c7?text=Healthcare' },
-  { id: 'banking', name: 'Banking', description: 'Compact, high-density layout for finance.', thumbnail: 'https://img-wrapper.vercel.app/image?url=https://placehold.co/300x400/f8fafc/0f172a?text=Banking' }
+  { id: 'modern', name: 'Modern Blue', description: 'Clean sidebar layout.', thumbnail: 'https://img-wrapper.vercel.app/image?url=https://placehold.co/300x400/e0e7ff/4f46e5?text=Modern' },
+  { id: 'modern-teal', name: 'Modern Teal', description: 'Fresh teal accent.', thumbnail: 'https://img-wrapper.vercel.app/image?url=https://placehold.co/300x400/ccfbf1/0f766e?text=Teal' },
+  { id: 'modern-rose', name: 'Modern Rose', description: 'Warm rose accent.', thumbnail: 'https://img-wrapper.vercel.app/image?url=https://placehold.co/300x400/ffe4e6/e11d48?text=Rose' },
+  { id: 'minimalist', name: 'Minimalist', description: 'Simple, ATS-friendly.', thumbnail: 'https://img-wrapper.vercel.app/image?url=https://placehold.co/300x400/ffffff/333333?text=Minimalist' },
+  { id: 'executive', name: 'Executive', description: 'Traditional, serif fonts.', thumbnail: 'https://img-wrapper.vercel.app/image?url=https://placehold.co/300x400/f8f9fa/2c3e50?text=Executive' },
+  { id: 'creative', name: 'Creative Pink', description: 'Bold header and colors.', thumbnail: 'https://img-wrapper.vercel.app/image?url=https://placehold.co/300x400/fff0f5/db2777?text=Creative' },
+  { id: 'creative-orange', name: 'Creative Orange', description: 'Energetic orange theme.', thumbnail: 'https://img-wrapper.vercel.app/image?url=https://placehold.co/300x400/fff7ed/c2410c?text=Orange' },
+  { id: 'tech', name: 'Tech Dark', description: 'Dark mode inspired.', thumbnail: 'https://img-wrapper.vercel.app/image?url=https://placehold.co/300x400/1e293b/60a5fa?text=Tech' },
+  { id: 'professional', name: 'Professional', description: 'Balanced layout.', thumbnail: 'https://img-wrapper.vercel.app/image?url=https://placehold.co/300x400/f0fdf4/166534?text=Professional' },
+  { id: 'academic', name: 'Academic', description: 'Education-focused.', thumbnail: 'https://img-wrapper.vercel.app/image?url=https://placehold.co/300x400/fff/000?text=Academic' },
+  { id: 'healthcare', name: 'Healthcare', description: 'Clean, clinical blue.', thumbnail: 'https://img-wrapper.vercel.app/image?url=https://placehold.co/300x400/e0f2fe/0284c7?text=Healthcare' },
+  { id: 'banking', name: 'Banking', description: 'Compact, high-density.', thumbnail: 'https://img-wrapper.vercel.app/image?url=https://placehold.co/300x400/f8fafc/0f172a?text=Banking' }
 ];

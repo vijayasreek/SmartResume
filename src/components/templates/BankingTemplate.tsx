@@ -1,19 +1,27 @@
 import React from 'react';
 import { Resume, FIELD_SECTIONS } from '../../types';
+import { ProfilePhoto } from './ProfilePhoto';
 
 export const BankingTemplate: React.FC<{ resume: Resume }> = ({ resume }) => {
   const experienceTitle = FIELD_SECTIONS[resume.field]?.experience || 'Professional Experience';
 
   return (
     <div className="bg-white w-full h-full p-10 text-black font-serif text-[10pt] leading-snug">
-      {/* Compact Header */}
-      <div className="text-center border-b border-black pb-4 mb-4">
-        <h1 className="text-2xl font-bold uppercase tracking-wide mb-1">{resume.personalInfo.fullName}</h1>
-        <div className="flex justify-center gap-3 text-sm">
-          {resume.personalInfo.location && <span>{resume.personalInfo.location}</span>}
-          {resume.personalInfo.phone && <span>• {resume.personalInfo.phone}</span>}
-          {resume.personalInfo.email && <span>• {resume.personalInfo.email}</span>}
+      {/* Header with Photo support */}
+      <div className="flex justify-between items-start border-b border-black pb-4 mb-4">
+        <div className="flex-1 text-center pr-6">
+          <h1 className="text-2xl font-bold uppercase tracking-wide mb-1">{resume.personalInfo.fullName}</h1>
+          <div className="flex justify-center gap-3 text-sm">
+            {resume.personalInfo.location && <span>{resume.personalInfo.location}</span>}
+            {resume.personalInfo.phone && <span>• {resume.personalInfo.phone}</span>}
+            {resume.personalInfo.email && <span>• {resume.personalInfo.email}</span>}
+          </div>
         </div>
+        <ProfilePhoto 
+          url={resume.personalInfo.photoUrl} 
+          initials={resume.personalInfo.fullName?.charAt(0)}
+          className="w-20 h-20 border border-gray-300 shrink-0"
+        />
       </div>
 
       {/* Education - Often first in Banking/Finance */}
@@ -21,8 +29,8 @@ export const BankingTemplate: React.FC<{ resume: Resume }> = ({ resume }) => {
         <section className="mb-4">
           <h2 className="text-sm font-bold uppercase border-b border-black mb-2">Education</h2>
           <div className="space-y-2">
-            {resume.education.map((edu) => (
-              <div key={edu.id} className="flex justify-between">
+            {resume.education.map((edu, i) => (
+              <div key={edu.id || i} className="flex justify-between">
                 <div>
                   <span className="font-bold">{edu.institution}</span>
                   <div className="italic">{edu.degree}</div>
@@ -42,15 +50,15 @@ export const BankingTemplate: React.FC<{ resume: Resume }> = ({ resume }) => {
         <section className="mb-4">
           <h2 className="text-sm font-bold uppercase border-b border-black mb-2">{experienceTitle}</h2>
           <div className="space-y-3">
-            {resume.experience.map((exp) => (
-              <div key={exp.id}>
+            {resume.experience.map((exp, i) => (
+              <div key={exp.id || i}>
                 <div className="flex justify-between mb-0.5">
                   <span className="font-bold">{exp.company}</span>
                   <span className="font-bold">{exp.startDate} – {exp.current ? 'Present' : exp.endDate}</span>
                 </div>
                 <div className="italic mb-1">{exp.position}</div>
                 <ul className="list-disc list-outside ml-4 space-y-0.5 text-justify">
-                  {exp.description.split('\n').map((line, i) => line.trim() && <li key={i}>{line.trim().replace(/^•\s*/, '')}</li>)}
+                  {exp.description.split('\n').filter(l => l.trim()).map((line, i) => <li key={i}>{line.trim().replace(/^•\s*/, '')}</li>)}
                 </ul>
               </div>
             ))}

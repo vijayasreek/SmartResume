@@ -17,15 +17,13 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({ value, onChange, onUpl
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validate size (max 2MB)
     if (file.size > 2 * 1024 * 1024) {
-      setError('Image size must be less than 2MB');
+      setError('Max 2MB');
       return;
     }
 
-    // Validate type
     if (!file.type.startsWith('image/')) {
-      setError('Please upload an image file');
+      setError('Images only');
       return;
     }
 
@@ -38,72 +36,58 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({ value, onChange, onUpl
         onChange(url);
       } catch (err) {
         console.error(err);
-        setError('Failed to upload image. Please try again.');
+        setError('Upload failed');
       } finally {
         setIsUploading(false);
       }
     } else {
-      // Fallback to base64 if no upload function provided (local mode)
       const reader = new FileReader();
-      reader.onloadend = () => {
-        onChange(reader.result as string);
-      };
+      reader.onloadend = () => onChange(reader.result as string);
       reader.readAsDataURL(file);
     }
   };
 
-  const handleRemove = () => {
-    onChange('');
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  };
-
   return (
-    <div className="space-y-2">
-      <label className="block text-sm font-medium text-gray-700">Profile Photo</label>
-      
-      <div className="flex items-center gap-6">
-        {/* Preview Circle */}
-        <div className="relative w-24 h-24 rounded-full border-2 border-dashed border-gray-300 bg-gray-50 flex items-center justify-center overflow-hidden shrink-0">
-          {isUploading ? (
-            <Loader2 className="h-8 w-8 text-indigo-600 animate-spin" />
-          ) : value ? (
+    <div className="flex flex-wrap items-center gap-4 sm:gap-6">
+      <div 
+        className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-full border-2 border-dashed border-gray-300 bg-gray-50 flex items-center justify-center overflow-hidden shrink-0 group hover:border-indigo-400 transition-colors cursor-pointer"
+        onClick={() => !isUploading && fileInputRef.current?.click()}
+      >
+        {isUploading ? (
+          <Loader2 className="h-8 w-8 text-indigo-600 animate-spin" />
+        ) : value ? (
+          <>
             <img src={value} alt="Profile" className="w-full h-full object-cover" />
-          ) : (
-            <ImageIcon className="h-8 w-8 text-gray-400" />
-          )}
-        </div>
+            <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+              <Upload className="h-6 w-6 text-white" />
+            </div>
+          </>
+        ) : (
+          <ImageIcon className="h-8 w-8 text-gray-400 group-hover:text-indigo-400 transition-colors" />
+        )}
+      </div>
 
-        {/* Actions */}
-        <div className="flex flex-col gap-2">
-          <div className="flex gap-2">
-            <Button 
-              type="button" 
-              variant="outline" 
-              size="sm" 
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isUploading}
-            >
-              <Upload className="h-4 w-4 mr-2" />
-              {isUploading ? 'Uploading...' : 'Upload Photo'}
-            </Button>
-            {value && (
-              <Button 
-                type="button" 
-                variant="ghost" 
-                size="sm" 
-                onClick={handleRemove}
-                className="text-red-600 hover:bg-red-50"
-                disabled={isUploading}
-              >
-                <X className="h-4 w-4 mr-1" /> Remove
-              </Button>
-            )}
-          </div>
-          <p className="text-xs text-gray-500">Max 2MB. JPG, PNG, or GIF.</p>
-          {error && <p className="text-xs text-red-500">{error}</p>}
-        </div>
+      <div className="flex flex-col gap-2 min-w-[140px]">
+        <Button 
+          type="button" 
+          variant="outline" 
+          size="sm" 
+          onClick={() => fileInputRef.current?.click()}
+          disabled={isUploading}
+          className="w-full sm:w-auto"
+        >
+          {isUploading ? 'Uploading...' : 'Upload Photo'}
+        </Button>
+        {value && (
+          <button 
+            type="button" 
+            onClick={() => { onChange(''); if(fileInputRef.current) fileInputRef.current.value = ''; }}
+            className="text-xs text-red-600 hover:text-red-700 font-medium text-left"
+          >
+            Remove photo
+          </button>
+        )}
+        {error && <p className="text-xs text-red-500">{error}</p>}
       </div>
 
       <input

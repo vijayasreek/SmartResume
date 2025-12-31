@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { useReactToPrint } from 'react-to-print';
-import { Resume, ResumeField, TEMPLATES, FIELD_SKILLS } from '../types';
+import { Resume, ResumeField, TEMPLATES, FIELD_SKILLS, FIELD_SECTIONS } from '../types';
 import { storage } from '../services/storage';
 import { useAuth } from '../context/AuthContext';
 import { aiService } from '../services/gemini';
@@ -13,9 +13,9 @@ import { SkillsSelector } from '../components/SkillsSelector';
 import { ImageUpload } from '../components/ImageUpload';
 import { 
   Save, Download, ArrowLeft, Plus, Trash2, Sparkles, 
-  ChevronRight, ChevronLeft, LayoutTemplate, Check, Loader2 
+  ChevronRight, ChevronLeft, LayoutTemplate, Check, Eye, Edit2, Loader2 
 } from 'lucide-react';
-import { cn } from '../lib/utils';
+import { cn, generateId } from '../lib/utils';
 
 const STEPS = ['Personal', 'Experience', 'Education', 'Projects', 'Skills', 'Languages'];
 
@@ -24,18 +24,22 @@ export const ResumeBuilder = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  
+  // State
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [activeStep, setActiveStep] = useState(0);
   const [isAiLoading, setIsAiLoading] = useState(false);
-  const [showTemplates, setShowTemplates] = useState(false);
+  const [showMobilePreview, setShowMobilePreview] = useState(false);
   
+  // Print Ref
   const componentRef = useRef<HTMLDivElement>(null);
   const handlePrint = useReactToPrint({
     contentRef: componentRef,
     documentTitle: 'Resume',
   });
 
+  // Form Setup
   const { register, control, handleSubmit, watch, reset, setValue, getValues } = useForm<Resume>({
     defaultValues: {
       title: 'My Resume',
@@ -50,27 +54,22 @@ export const ResumeBuilder = () => {
     }
   });
 
+  // Field Arrays
   const { fields: expFields, append: appendExp, remove: removeExp } = useFieldArray({ control, name: 'experience' });
   const { fields: eduFields, append: appendEdu, remove: removeEdu } = useFieldArray({ control, name: 'education' });
   const { fields: projFields, append: appendProj, remove: removeProj } = useFieldArray({ control, name: 'projects' });
 
-  // Watch for live preview
+  // Watch data for live preview
   const formData = watch();
 
+  // Load Resume Data
   useEffect(() => {
     const loadResume = async () => {
       if (!user) return;
-      
       if (id === 'new') {
-        // If template query param exists, use it
-        const templateParam = searchParams.get('template');
-        if (templateParam) {
-            setValue('templateId', templateParam);
-        }
         setLoading(false);
         return;
       }
-
       try {
         const data = await storage.getResume(id!);
         if (data) {
@@ -84,10 +83,10 @@ export const ResumeBuilder = () => {
         setLoading(false);
       }
     };
-
     loadResume();
-  }, [id, user, navigate, reset, searchParams, setValue]);
+  }, [id, user, navigate, reset]);
 
+  // Save Handler
   const onSave = async (data: Resume) => {
     if (!user) return;
     setSaving(true);
@@ -104,15 +103,16 @@ export const ResumeBuilder = () => {
     }
   };
 
+  // AI Handlers
   const handleAiAutoFill = async () => {
     const field = getValues('field');
     if (!confirm(`Auto-fill resume for ${field}? This will overwrite current fields.`)) return;
-
+    
     setIsAiLoading(true);
     try {
       const generatedData = await aiService.generateFromField(field);
-      
       const currentPersonal = getValues('personalInfo');
+      
       const newValues = {
         ...getValues(),
         personalInfo: {
@@ -121,14 +121,17 @@ export const ResumeBuilder = () => {
           email: currentPersonal.email || '',
           phone: currentPersonal.phone || '',
           location: currentPersonal.location || '',
-          photoUrl: currentPersonal.photoUrl
+          photoUrl: currentPersonal.photoUrl,
+          website: currentPersonal.website || '',
+          linkedin: currentPersonal.linkedin || '',
+          github: currentPersonal.github || ''
         },
-        experience: generatedData.experience,
-        education: generatedData.education,
-        projects: generatedData.projects,
+        experience: generatedData.experience.map((e: any) => ({ ...e, id: generateId() })),
+        education: generatedData.education.map((e: any) => ({ ...e, id: generateId() })),
+        projects: generatedData.projects.map((e: any) => ({ ...e, id: generateId() })),
         skills: generatedData.skills
       };
-
+      
       reset(newValues);
     } catch (e) {
       console.error(e);
@@ -138,390 +141,405 @@ export const ResumeBuilder = () => {
     }
   };
 
-  const handleAiImprove = async (index: number, type: 'experience' | 'projects') => {
-    const fieldName = type === 'experience' ? `experience.${index}.description` : `projects.${index}.description`;
-    const currentText = getValues(fieldName as any);
-    const role = type === 'experience' ? getValues(`experience.${index}.position`) : 'Project';
-    
-    if (!currentText) return;
-
+  const handleImproveDescription = async (index: number, text: string) => {
+    if (!text) return;
     setIsAiLoading(true);
     try {
-      const improved = await aiService.improveBullets(currentText, role, getValues('field'));
-      setValue(fieldName as any, improved);
+      const field = getValues('field');
+      const role = getValues(`experience.${index}.position`);
+      const improved = await aiService.improveBullets(text, role, field);
+      setValue(`experience.${index}.description`, improved);
     } catch (e) {
       console.error(e);
-      alert('Failed to improve text.');
+      alert('AI improvement failed.');
     } finally {
       setIsAiLoading(false);
     }
   };
 
-  const handleTemplateChange = (templateId: string) => {
-    setValue('templateId', templateId);
-    setShowTemplates(false);
-  };
-
   if (loading) return <div className="flex justify-center items-center h-screen"><Loader2 className="animate-spin h-8 w-8 text-indigo-600" /></div>;
 
   return (
-    <div className="flex h-screen bg-gray-100 overflow-hidden">
-      {/* LEFT SIDEBAR - EDITOR */}
-      <div className="w-1/2 flex flex-col border-r border-gray-200 bg-white h-full z-10 shadow-xl">
-        {/* Header */}
-        <div className="h-16 border-b border-gray-200 flex items-center justify-between px-6 bg-white shrink-0">
-          <div className="flex items-center gap-4">
-            <button onClick={() => navigate('/dashboard')} className="p-2 hover:bg-gray-100 rounded-full text-gray-500">
-              <ArrowLeft size={20} />
-            </button>
-            <Input 
-              {...register('title')} 
-              className="border-none shadow-none text-lg font-semibold focus:ring-0 px-0 w-48" 
+    <div className="flex flex-col h-screen bg-gray-100 overflow-hidden">
+      {/* HEADER - Fixed Top */}
+      <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-4 sm:px-6 shrink-0 z-20 shadow-sm">
+        <div className="flex items-center gap-4">
+          <button onClick={() => navigate('/dashboard')} className="p-2 hover:bg-gray-100 rounded-full text-gray-500 transition-colors">
+            <ArrowLeft size={20} />
+          </button>
+          <div className="flex flex-col">
+            <input
+              {...register('title')}
+              className="text-lg font-bold text-gray-900 border-none focus:ring-0 p-0 bg-transparent placeholder-gray-400"
               placeholder="Resume Title"
             />
-          </div>
-          <div className="flex items-center gap-2">
-             <Button 
-              variant="outline" 
-              size="sm"
-              onClick={() => setShowTemplates(!showTemplates)}
-              className={cn("hidden md:flex", showTemplates && "bg-indigo-50 border-indigo-200 text-indigo-700")}
-            >
-              <LayoutTemplate className="h-4 w-4 mr-2" />
-              {showTemplates ? 'Close Templates' : 'Templates'}
-            </Button>
-            <Button onClick={handleSubmit(onSave)} disabled={saving} size="sm">
-              <Save className="h-4 w-4 mr-2" />
-              {saving ? 'Saving...' : 'Save'}
-            </Button>
+            <span className="text-xs text-gray-500">{saving ? 'Saving...' : 'All changes saved'}</span>
           </div>
         </div>
 
-        {/* Template Selector Overlay */}
-        {showTemplates && (
-          <div className="border-b border-gray-200 bg-gray-50 p-4 overflow-x-auto shrink-0 animate-in slide-in-from-top-4">
-            <div className="flex gap-4 min-w-max">
-              {TEMPLATES.map(t => (
+        <div className="flex items-center gap-2 sm:gap-3">
+          {/* Template Selector (Simple Dropdown) */}
+          <div className="hidden sm:block relative group">
+             <select 
+               {...register('templateId')}
+               className="appearance-none bg-gray-50 border border-gray-300 text-gray-700 py-2 pl-3 pr-8 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+             >
+               {TEMPLATES.map(t => (
+                 <option key={t.id} value={t.id}>{t.name}</option>
+               ))}
+             </select>
+             <LayoutTemplate className="absolute right-2.5 top-2.5 h-4 w-4 text-gray-500 pointer-events-none" />
+          </div>
+
+          <Button variant="outline" onClick={() => handleSubmit(onSave)()} disabled={saving} className="hidden sm:flex">
+            <Save className="h-4 w-4 mr-2" />
+            Save
+          </Button>
+          
+          <Button onClick={() => handlePrint()} className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm">
+            <Download className="h-4 w-4 mr-2" />
+            PDF
+          </Button>
+        </div>
+      </header>
+
+      {/* MAIN CONTENT - Split Screen */}
+      <div className="flex-1 flex overflow-hidden relative">
+        
+        {/* LEFT PANEL: EDITOR */}
+        <div className={cn(
+          "flex-1 bg-white flex flex-col h-full transition-all duration-300 ease-in-out overflow-hidden",
+          showMobilePreview ? "hidden md:flex" : "flex"
+        )}>
+          {/* Stepper Navigation */}
+          <div className="h-14 border-b border-gray-200 flex items-center px-4 overflow-x-auto scrollbar-hide shrink-0 bg-white">
+            <div className="flex space-x-1">
+              {STEPS.map((step, i) => (
                 <button
-                  key={t.id}
-                  onClick={() => handleTemplateChange(t.id)}
+                  key={step}
+                  onClick={() => setActiveStep(i)}
                   className={cn(
-                    "flex flex-col items-center gap-2 p-2 rounded-lg border-2 transition-all w-32",
-                    formData.templateId === t.id 
-                      ? "border-indigo-600 bg-indigo-50" 
-                      : "border-transparent hover:bg-gray-200"
+                    "px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors",
+                    activeStep === i 
+                      ? "bg-indigo-100 text-indigo-700" 
+                      : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
                   )}
                 >
-                  <div className="w-full aspect-[3/4] bg-white shadow-sm rounded border border-gray-200 overflow-hidden relative">
-                    <img src={t.thumbnail} alt={t.name} className="w-full h-full object-cover" />
-                    {formData.templateId === t.id && (
-                      <div className="absolute inset-0 bg-indigo-600/20 flex items-center justify-center">
-                        <div className="bg-indigo-600 text-white rounded-full p-1">
-                          <Check size={12} />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  <span className="text-xs font-medium text-gray-700">{t.name}</span>
+                  {step}
                 </button>
               ))}
             </div>
           </div>
-        )}
 
-        {/* Steps Navigation */}
-        <div className="flex border-b border-gray-200 bg-gray-50 overflow-x-auto shrink-0">
-          {STEPS.map((step, idx) => (
-            <button
-              key={step}
-              onClick={() => setActiveStep(idx)}
-              className={cn(
-                "px-6 py-3 text-sm font-medium whitespace-nowrap border-b-2 transition-colors",
-                activeStep === idx 
-                  ? "border-indigo-600 text-indigo-600 bg-white" 
-                  : "border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-100"
-              )}
-            >
-              {step}
-            </button>
-          ))}
-        </div>
-
-        {/* Form Content */}
-        <div className="flex-1 overflow-y-auto p-8">
-          {/* Step 1: Personal */}
-          {activeStep === 0 && (
-            <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
-              <div className="flex items-start gap-6">
-                <div className="w-1/3">
-                   <ImageUpload 
-                      value={formData.personalInfo.photoUrl} 
-                      onChange={(url) => setValue('personalInfo.photoUrl', url)}
-                      onUpload={(file) => storage.uploadImage(file, user!.id)}
-                   />
-                </div>
-                <div className="w-2/3 space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <Input label="Full Name" {...register('personalInfo.fullName')} placeholder="John Doe" />
-                    <Input label="Email" {...register('personalInfo.email')} placeholder="john@example.com" />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <Input label="Phone" {...register('personalInfo.phone')} placeholder="+1 234 567 890" />
-                    <Input label="Location" {...register('personalInfo.location')} placeholder="New York, NY" />
-                  </div>
-                </div>
-              </div>
+          {/* Scrollable Form Area */}
+          <div className="flex-1 overflow-y-auto p-6 md:p-8">
+            <div className="max-w-3xl mx-auto space-y-8 pb-20">
               
-              <div className="grid grid-cols-2 gap-4">
-                 <Input label="Website" {...register('personalInfo.website')} placeholder="www.johndoe.com" />
-                 <Input label="LinkedIn" {...register('personalInfo.linkedin')} placeholder="linkedin.com/in/johndoe" />
-              </div>
-
-              <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-100">
-                <label className="block text-sm font-medium text-indigo-900 mb-2">Target Profession</label>
-                <div className="flex gap-2">
-                  <select 
-                    {...register('field')}
-                    className="flex-1 rounded-md border border-indigo-200 shadow-sm p-2 text-sm focus:ring-indigo-500 focus:border-indigo-500"
-                  >
-                    {Object.keys(FIELD_SKILLS).map(field => (
-                      <option key={field} value={field}>{field}</option>
-                    ))}
-                  </select>
-                  <Button type="button" onClick={handleAiAutoFill} disabled={isAiLoading} className="shrink-0">
-                    <Sparkles className="h-4 w-4 mr-2" />
-                    {isAiLoading ? 'Generating...' : 'Auto-Fill'}
-                  </Button>
-                </div>
-                <p className="text-xs text-indigo-600 mt-2">
-                  Select your field and click Auto-Fill to generate a sample resume instantly.
-                </p>
-              </div>
-
-              <div>
-                <div className="flex justify-between mb-1">
-                  <label className="block text-sm font-medium text-gray-700">Professional Summary</label>
-                  <button 
-                    type="button"
-                    onClick={async () => {
-                       setIsAiLoading(true);
-                       try {
-                         const summary = await aiService.generateSummary(
-                           getValues('personalInfo.fullName') || 'Professional', 
-                           getValues('skills'), 
-                           '5 years', 
-                           getValues('field')
-                         );
-                         setValue('personalInfo.summary', summary);
-                       } catch(e) { alert('Failed to generate summary'); }
-                       setIsAiLoading(false);
-                    }}
-                    className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center"
-                  >
-                    <Sparkles className="h-3 w-3 mr-1" /> AI Write
-                  </button>
-                </div>
-                <textarea 
-                  {...register('personalInfo.summary')}
-                  rows={4}
-                  className="w-full rounded-md border border-gray-300 p-3 text-sm focus:ring-indigo-500 focus:border-indigo-500"
-                  placeholder="Experienced professional with a proven track record..."
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Step 2: Experience */}
-          {activeStep === 1 && (
-            <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
-              {expFields.map((field, index) => (
-                <div key={field.id} className="p-4 border border-gray-200 rounded-lg bg-gray-50 relative group">
-                  <button 
-                    type="button" 
-                    onClick={() => removeExp(index)}
-                    className="absolute top-2 right-2 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                  <div className="grid grid-cols-2 gap-4 mb-4">
-                    <Input label="Company" {...register(`experience.${index}.company`)} />
-                    <Input label="Position" {...register(`experience.${index}.position`)} />
-                    <Input label="Start Date" type="text" placeholder="Jan 2020" {...register(`experience.${index}.startDate`)} />
-                    <div className="flex gap-2">
-                       <Input label="End Date" type="text" placeholder="Present" {...register(`experience.${index}.endDate`)} />
-                       <div className="flex items-center pt-6">
-                         <input type="checkbox" {...register(`experience.${index}.current`)} className="mr-2" />
-                         <span className="text-sm">Current</span>
-                       </div>
+              {/* STEP 0: PERSONAL */}
+              {activeStep === 0 && (
+                <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
+                  <div className="bg-indigo-50 p-6 rounded-xl border border-indigo-100">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
+                      <div>
+                        <h3 className="text-lg font-bold text-indigo-900">Target Profession</h3>
+                        <p className="text-sm text-indigo-700">Select a field to get AI-tailored suggestions.</p>
+                      </div>
+                      <Button 
+                        type="button" 
+                        onClick={handleAiAutoFill} 
+                        disabled={isAiLoading}
+                        size="sm"
+                        className="bg-indigo-600 text-white shrink-0"
+                      >
+                        {isAiLoading ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : <Sparkles className="h-4 w-4 mr-2" />}
+                        Auto-Fill with AI
+                      </Button>
                     </div>
+                    <select
+                      {...register('field')}
+                      className="w-full rounded-lg border-indigo-200 focus:border-indigo-500 focus:ring-indigo-500"
+                    >
+                      {Object.keys(FIELD_SKILLS).map(field => (
+                        <option key={field} value={field}>{field}</option>
+                      ))}
+                    </select>
                   </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-12 gap-8">
+                     {/* Photo Upload - Takes 4 columns on desktop */}
+                     <div className="md:col-span-4 flex flex-col gap-2">
+                        <label className="block text-sm font-semibold text-gray-700">Profile Photo</label>
+                        <ImageUpload 
+                          value={watch('personalInfo.photoUrl')}
+                          onChange={(url) => setValue('personalInfo.photoUrl', url)}
+                          onUpload={async (file) => {
+                             if (!user) throw new Error("Login required");
+                             return await storage.uploadImage(file, user.id);
+                          }}
+                        />
+                     </div>
+
+                     {/* Basic Info - Takes 8 columns */}
+                     <div className="md:col-span-8 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <Input label="Full Name" {...register('personalInfo.fullName')} placeholder="Jane Doe" />
+                        <Input label="Email" {...register('personalInfo.email')} placeholder="jane@example.com" />
+                        <Input label="Phone" {...register('personalInfo.phone')} placeholder="+1 234 567 890" />
+                        <Input label="Location" {...register('personalInfo.location')} placeholder="New York, NY" />
+                     </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <Input label="Website" {...register('personalInfo.website')} placeholder="janedoe.com" />
+                    <Input label="LinkedIn" {...register('personalInfo.linkedin')} placeholder="linkedin.com/in/jane" />
+                    <Input label="GitHub/Portfolio" {...register('personalInfo.github')} placeholder="github.com/jane" />
+                  </div>
+
                   <div>
-                    <div className="flex justify-between mb-1">
-                       <label className="text-sm font-medium text-gray-700">Description</label>
-                       <button 
-                        type="button"
-                        onClick={() => handleAiImprove(index, 'experience')}
-                        className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center"
-                       >
-                         <Sparkles className="h-3 w-3 mr-1" /> AI Improve
-                       </button>
+                    <div className="flex justify-between items-center mb-2">
+                      <label className="block text-sm font-semibold text-gray-700">Professional Summary</label>
+                      <Button 
+                        type="button" 
+                        variant="ghost" 
+                        size="sm" 
+                        className="text-indigo-600 h-auto py-0 px-2"
+                        onClick={async () => {
+                           setIsAiLoading(true);
+                           try {
+                             const summary = await aiService.generateSummary(
+                               getValues('title'), 
+                               getValues('skills'), 
+                               getValues('experience.0.description') || '',
+                               getValues('field')
+                             );
+                             setValue('personalInfo.summary', summary);
+                           } catch(e) { alert('AI Error'); }
+                           setIsAiLoading(false);
+                        }}
+                      >
+                        <Sparkles className="h-3 w-3 mr-1" /> AI Write
+                      </Button>
                     </div>
-                    <textarea 
-                      {...register(`experience.${index}.description`)}
+                    <textarea
+                      {...register('personalInfo.summary')}
                       rows={4}
-                      className="w-full rounded-md border border-gray-300 p-2 text-sm"
-                      placeholder="• Achieved X..."
+                      className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                      placeholder="Experienced professional with a proven track record..."
                     />
                   </div>
                 </div>
-              ))}
-              <Button type="button" variant="outline" onClick={() => appendExp({ id: '', company: '', position: '', startDate: '', endDate: '', current: false, description: '' })} className="w-full">
-                <Plus className="h-4 w-4 mr-2" /> Add Experience
-              </Button>
-            </div>
-          )}
+              )}
 
-          {/* Step 3: Education */}
-          {activeStep === 2 && (
-            <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
-              {eduFields.map((field, index) => (
-                <div key={field.id} className="p-4 border border-gray-200 rounded-lg bg-gray-50 relative group">
-                  <button type="button" onClick={() => removeEdu(index)} className="absolute top-2 right-2 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Trash2 size={16} />
-                  </button>
-                  <div className="grid grid-cols-2 gap-4">
-                    <Input label="Institution" {...register(`education.${index}.institution`)} />
-                    <Input label="Degree" {...register(`education.${index}.degree`)} />
-                    <Input label="Field of Study" {...register(`education.${index}.fieldOfStudy`)} />
-                    <div className="grid grid-cols-2 gap-2">
-                      <Input label="Start Year" {...register(`education.${index}.startDate`)} />
-                      <Input label="End Year" {...register(`education.${index}.endDate`)} />
-                    </div>
-                  </div>
-                </div>
-              ))}
-              <Button type="button" variant="outline" onClick={() => appendEdu({ id: '', institution: '', degree: '', fieldOfStudy: '', startDate: '', endDate: '' })} className="w-full">
-                <Plus className="h-4 w-4 mr-2" /> Add Education
-              </Button>
-            </div>
-          )}
-
-          {/* Step 4: Projects */}
-          {activeStep === 3 && (
-            <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
-               {projFields.map((field, index) => (
-                <div key={field.id} className="p-4 border border-gray-200 rounded-lg bg-gray-50 relative group">
-                  <button type="button" onClick={() => removeProj(index)} className="absolute top-2 right-2 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Trash2 size={16} />
-                  </button>
-                  <div className="grid grid-cols-2 gap-4 mb-4">
-                    <Input label="Project Name" {...register(`projects.${index}.name`)} />
-                    <Input label="Link" {...register(`projects.${index}.link`)} />
-                    <div className="col-span-2">
-                       <Input label="Technologies Used" {...register(`projects.${index}.technologies`)} placeholder="React, Node.js, etc." />
-                    </div>
-                  </div>
-                  <textarea 
-                    {...register(`projects.${index}.description`)}
-                    rows={3}
-                    className="w-full rounded-md border border-gray-300 p-2 text-sm"
-                    placeholder="Project description..."
-                  />
-                </div>
-              ))}
-              <Button type="button" variant="outline" onClick={() => appendProj({ id: '', name: '', description: '', link: '', technologies: '' })} className="w-full">
-                <Plus className="h-4 w-4 mr-2" /> Add Project
-              </Button>
-            </div>
-          )}
-
-          {/* Step 5: Skills */}
-          {activeStep === 4 && (
-            <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-               <div className="bg-white p-6 rounded-lg border border-gray-200">
-                 <h3 className="text-lg font-medium text-gray-900 mb-4">Skills</h3>
-                 <SkillsSelector 
-                    field={formData.field}
-                    selectedSkills={formData.skills}
-                    onChange={(newSkills) => setValue('skills', newSkills)}
-                 />
-               </div>
-            </div>
-          )}
-
-          {/* Step 6: Languages */}
-          {activeStep === 5 && (
-            <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-               <div className="bg-white p-6 rounded-lg border border-gray-200">
-                 <h3 className="text-lg font-medium text-gray-900 mb-4">Languages</h3>
-                 <div className="space-y-3">
-                    {formData.languages.map((lang, i) => (
-                        <div key={i} className="flex items-center gap-2">
-                            <Input 
-                                value={lang} 
-                                onChange={(e) => {
-                                    const newLangs = [...formData.languages];
-                                    newLangs[i] = e.target.value;
-                                    setValue('languages', newLangs);
-                                }}
-                            />
-                            <Button size="sm" variant="ghost" onClick={() => {
-                                const newLangs = formData.languages.filter((_, idx) => idx !== i);
-                                setValue('languages', newLangs);
-                            }}>
-                                <Trash2 className="h-4 w-4 text-red-500" />
-                            </Button>
-                        </div>
-                    ))}
-                    <Button 
-                        type="button" 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => setValue('languages', [...formData.languages, ''])}
-                    >
-                        <Plus className="h-4 w-4 mr-2" /> Add Language
+              {/* STEP 1: EXPERIENCE */}
+              {activeStep === 1 && (
+                <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+                  <div className="flex justify-between items-center">
+                    <h2 className="text-xl font-bold text-gray-900">Work Experience</h2>
+                    <Button type="button" onClick={() => appendExp({ id: generateId(), company: '', position: '', startDate: '', endDate: '', current: false, description: '' })} size="sm">
+                      <Plus className="h-4 w-4 mr-2" /> Add Job
                     </Button>
-                 </div>
-               </div>
+                  </div>
+
+                  {expFields.map((field, index) => (
+                    <div key={field.id} className="p-6 bg-gray-50 rounded-xl border border-gray-200 relative group">
+                      <button
+                        type="button"
+                        onClick={() => removeExp(index)}
+                        className="absolute top-4 right-4 text-gray-400 hover:text-red-500 transition-colors"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                      
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                        <Input label="Job Title" {...register(`experience.${index}.position`)} placeholder="Senior Engineer" />
+                        <Input label="Company" {...register(`experience.${index}.company`)} placeholder="Tech Corp" />
+                        <Input label="Start Date" type="month" {...register(`experience.${index}.startDate`)} />
+                        <div className="flex flex-col">
+                           <Input 
+                             label="End Date" 
+                             type="month" 
+                             {...register(`experience.${index}.endDate`)} 
+                             disabled={watch(`experience.${index}.current`)} 
+                           />
+                           <div className="mt-2 flex items-center">
+                             <input 
+                               type="checkbox" 
+                               id={`current-${index}`}
+                               {...register(`experience.${index}.current`)}
+                               className="rounded text-indigo-600 focus:ring-indigo-500"
+                             />
+                             <label htmlFor={`current-${index}`} className="ml-2 text-sm text-gray-600">I currently work here</label>
+                           </div>
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className="flex justify-between items-center mb-2">
+                          <label className="text-sm font-semibold text-gray-700">Description</label>
+                          <Button 
+                            type="button" 
+                            variant="ghost" 
+                            size="sm" 
+                            className="text-indigo-600 h-auto py-0 px-2"
+                            onClick={() => handleImproveDescription(index, getValues(`experience.${index}.description`))}
+                          >
+                            <Sparkles className="h-3 w-3 mr-1" /> Improve
+                          </Button>
+                        </div>
+                        <textarea
+                          {...register(`experience.${index}.description`)}
+                          rows={4}
+                          className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:ring-2 focus:ring-indigo-500"
+                          placeholder="• Achieved X by doing Y..."
+                        />
+                      </div>
+                    </div>
+                  ))}
+                  {expFields.length === 0 && <p className="text-center text-gray-500 py-8">No experience added yet.</p>}
+                </div>
+              )}
+
+              {/* STEP 2: EDUCATION */}
+              {activeStep === 2 && (
+                <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+                  <div className="flex justify-between items-center">
+                    <h2 className="text-xl font-bold text-gray-900">Education</h2>
+                    <Button type="button" onClick={() => appendEdu({ id: generateId(), institution: '', degree: '', fieldOfStudy: '', startDate: '', endDate: '' })} size="sm">
+                      <Plus className="h-4 w-4 mr-2" /> Add Education
+                    </Button>
+                  </div>
+
+                  {eduFields.map((field, index) => (
+                    <div key={field.id} className="p-6 bg-gray-50 rounded-xl border border-gray-200 relative">
+                      <button
+                        type="button"
+                        onClick={() => removeEdu(index)}
+                        className="absolute top-4 right-4 text-gray-400 hover:text-red-500"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <Input label="School / University" {...register(`education.${index}.institution`)} />
+                        <Input label="Degree" {...register(`education.${index}.degree`)} placeholder="Bachelor's" />
+                        <Input label="Field of Study" {...register(`education.${index}.fieldOfStudy`)} placeholder="Computer Science" />
+                        <div className="grid grid-cols-2 gap-2">
+                          <Input label="Start Year" {...register(`education.${index}.startDate`)} placeholder="2018" />
+                          <Input label="End Year" {...register(`education.${index}.endDate`)} placeholder="2022" />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* STEP 3: PROJECTS */}
+              {activeStep === 3 && (
+                <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+                  <div className="flex justify-between items-center">
+                    <h2 className="text-xl font-bold text-gray-900">Projects</h2>
+                    <Button type="button" onClick={() => appendProj({ id: generateId(), name: '', description: '', link: '', technologies: '' })} size="sm">
+                      <Plus className="h-4 w-4 mr-2" /> Add Project
+                    </Button>
+                  </div>
+
+                  {projFields.map((field, index) => (
+                    <div key={field.id} className="p-6 bg-gray-50 rounded-xl border border-gray-200 relative">
+                      <button
+                        type="button"
+                        onClick={() => removeProj(index)}
+                        className="absolute top-4 right-4 text-gray-400 hover:text-red-500"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <Input label="Project Name" {...register(`projects.${index}.name`)} />
+                          <Input label="Link (Optional)" {...register(`projects.${index}.link`)} />
+                        </div>
+                        <Input label="Technologies Used" {...register(`projects.${index}.technologies`)} placeholder="React, Node.js, AWS" />
+                        <textarea
+                          {...register(`projects.${index}.description`)}
+                          rows={3}
+                          className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:ring-2 focus:ring-indigo-500"
+                          placeholder="Brief description of the project..."
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* STEP 4: SKILLS */}
+              {activeStep === 4 && (
+                <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+                  <h2 className="text-xl font-bold text-gray-900">Skills</h2>
+                  <div className="bg-gray-50 p-6 rounded-xl border border-gray-200">
+                    <SkillsSelector
+                      field={watch('field')}
+                      selectedSkills={watch('skills')}
+                      onChange={(skills) => setValue('skills', skills)}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 5: LANGUAGES */}
+              {activeStep === 5 && (
+                <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+                  <h2 className="text-xl font-bold text-gray-900">Languages</h2>
+                  <div className="bg-gray-50 p-6 rounded-xl border border-gray-200">
+                    <SkillsSelector
+                      field="General" // Reuse selector for languages
+                      selectedSkills={watch('languages') || []}
+                      onChange={(langs) => setValue('languages', langs)}
+                    />
+                  </div>
+                </div>
+              )}
+
             </div>
-          )}
+          </div>
+
+          {/* Bottom Navigation Bar */}
+          <div className="h-16 border-t border-gray-200 bg-white px-6 flex items-center justify-between shrink-0">
+            <Button
+              variant="outline"
+              onClick={() => setActiveStep(Math.max(0, activeStep - 1))}
+              disabled={activeStep === 0}
+            >
+              <ChevronLeft className="h-4 w-4 mr-2" /> Back
+            </Button>
+            
+            <div className="text-sm text-gray-500 font-medium">
+              Step {activeStep + 1} of {STEPS.length}
+            </div>
+
+            <Button
+              onClick={() => setActiveStep(Math.min(STEPS.length - 1, activeStep + 1))}
+              disabled={activeStep === STEPS.length - 1}
+            >
+              Next <ChevronRight className="h-4 w-4 ml-2" />
+            </Button>
+          </div>
         </div>
 
-        {/* Footer Navigation */}
-        <div className="p-4 border-t border-gray-200 bg-white flex justify-between shrink-0">
-          <Button 
-            variant="ghost" 
-            onClick={() => setActiveStep(Math.max(0, activeStep - 1))}
-            disabled={activeStep === 0}
-          >
-            <ChevronLeft className="h-4 w-4 mr-2" /> Back
-          </Button>
-          <Button 
-            onClick={() => {
-                if (activeStep < STEPS.length - 1) {
-                    setActiveStep(activeStep + 1);
-                } else {
-                    handleSubmit(onSave)();
-                }
-            }}
-          >
-            {activeStep === STEPS.length - 1 ? 'Finish & Save' : 'Next'} <ChevronRight className="h-4 w-4 ml-2" />
-          </Button>
+        {/* RIGHT PANEL: PREVIEW */}
+        <div className={cn(
+          "flex-1 bg-gray-100 h-full overflow-y-auto flex justify-center p-8 transition-all duration-300",
+          showMobilePreview ? "fixed inset-0 z-30 pt-20" : "hidden md:flex"
+        )}>
+          <div className="w-full max-w-[210mm]">
+             <ResumePreview resume={formData} ref={componentRef} />
+          </div>
         </div>
-      </div>
 
-      {/* RIGHT SIDEBAR - PREVIEW */}
-      <div className="w-1/2 bg-gray-200 h-full overflow-y-auto p-8 flex flex-col items-center">
-        <div className="mb-4 flex items-center justify-between w-[210mm]">
-          <h2 className="text-gray-700 font-medium">Live Preview</h2>
-          <Button onClick={handlePrint} variant="secondary" size="sm">
-            <Download className="h-4 w-4 mr-2" /> Download PDF
-          </Button>
-        </div>
-        
-        <div className="shadow-2xl print:shadow-none transition-all duration-300 ease-in-out transform origin-top scale-[0.85] md:scale-100">
-          <ResumePreview ref={componentRef} resume={formData} />
-        </div>
+        {/* Mobile Preview Toggle */}
+        <button
+          onClick={() => setShowMobilePreview(!showMobilePreview)}
+          className="md:hidden fixed bottom-20 right-6 h-14 w-14 bg-indigo-600 text-white rounded-full shadow-lg flex items-center justify-center z-40 hover:bg-indigo-700 transition-colors"
+        >
+          {showMobilePreview ? <Edit2 className="h-6 w-6" /> : <Eye className="h-6 w-6" />}
+        </button>
+
       </div>
     </div>
   );

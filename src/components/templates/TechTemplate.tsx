@@ -1,5 +1,6 @@
 import React from 'react';
 import { Resume, FIELD_SECTIONS } from '../../types';
+import { ProfilePhoto } from './ProfilePhoto';
 
 export const TechTemplate: React.FC<{ resume: Resume }> = ({ resume }) => {
   const experienceTitle = FIELD_SECTIONS[resume.field]?.experience || 'Experience';
@@ -28,8 +29,8 @@ export const TechTemplate: React.FC<{ resume: Resume }> = ({ resume }) => {
               <span className="text-blue-600 mr-2">{'>'}</span> {experienceTitle}
             </h2>
             <div className="space-y-6">
-              {resume.experience.map((exp) => (
-                <div key={exp.id}>
+              {resume.experience.map((exp, i) => (
+                <div key={exp.id || i}>
                   <div className="flex justify-between items-start mb-1">
                     <h3 className="font-bold text-slate-900">{exp.position} @ {exp.company}</h3>
                     <span className="text-xs bg-slate-100 px-2 py-1 rounded text-slate-600">{exp.startDate} - {exp.current ? 'Now' : exp.endDate}</span>
@@ -47,8 +48,8 @@ export const TechTemplate: React.FC<{ resume: Resume }> = ({ resume }) => {
               <span className="text-blue-600 mr-2">{'>'}</span> Projects
             </h2>
             <div className="grid gap-4">
-              {resume.projects.map((proj) => (
-                <div key={proj.id} className="border border-slate-200 p-3 rounded bg-slate-50">
+              {resume.projects.map((proj, i) => (
+                <div key={proj.id || i} className="border border-slate-200 p-3 rounded bg-slate-50">
                    <div className="flex justify-between">
                      <h3 className="font-bold text-slate-900">{proj.name}</h3>
                      {proj.link && <a href={proj.link} className="text-blue-600 hover:underline text-xs">Link</a>}
@@ -63,15 +64,26 @@ export const TechTemplate: React.FC<{ resume: Resume }> = ({ resume }) => {
       </div>
 
       {/* Sidebar Right */}
-      <div className="w-[30%] bg-slate-900 text-slate-300 p-8">
+      <div className="w-[30%] bg-slate-900 text-slate-300 p-8 flex flex-col">
+        {/* Photo */}
+        <div className="mb-8 flex justify-center">
+          <ProfilePhoto 
+            url={resume.personalInfo.photoUrl} 
+            initials={resume.personalInfo.fullName?.charAt(0)}
+            className="w-32 h-32 rounded-full border-4 border-slate-700"
+            bgColor="bg-slate-800"
+            iconColor="text-slate-500"
+          />
+        </div>
+
         <div className="mb-8">
           <h3 className="text-white font-bold uppercase mb-4 border-b border-slate-700 pb-2">Contact</h3>
           <div className="space-y-2 text-xs">
             <p>{resume.personalInfo.email}</p>
             <p>{resume.personalInfo.phone}</p>
             <p>{resume.personalInfo.location}</p>
-            <p className="text-blue-400">{resume.personalInfo.github}</p>
-            <p className="text-blue-400">{resume.personalInfo.linkedin}</p>
+            <p className="text-blue-400 break-all">{resume.personalInfo.github}</p>
+            <p className="text-blue-400 break-all">{resume.personalInfo.linkedin}</p>
           </div>
         </div>
 
@@ -90,8 +102,8 @@ export const TechTemplate: React.FC<{ resume: Resume }> = ({ resume }) => {
           <div>
             <h3 className="text-white font-bold uppercase mb-4 border-b border-slate-700 pb-2">Education</h3>
             <div className="space-y-4">
-              {resume.education.map((edu) => (
-                <div key={edu.id}>
+              {resume.education.map((edu, i) => (
+                <div key={edu.id || i}>
                   <p className="text-white font-bold">{edu.degree}</p>
                   <p className="text-xs text-slate-400">{edu.institution}</p>
                   <p className="text-xs text-slate-500">{edu.startDate} - {edu.endDate}</p>

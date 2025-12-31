@@ -1,5 +1,6 @@
 import React from 'react';
 import { Resume, FIELD_SECTIONS } from '../../types';
+import { ProfilePhoto } from './ProfilePhoto';
 
 export const AcademicTemplate: React.FC<{ resume: Resume }> = ({ resume }) => {
   const experienceTitle = FIELD_SECTIONS[resume.field]?.experience || 'Professional Experience';
@@ -7,14 +8,21 @@ export const AcademicTemplate: React.FC<{ resume: Resume }> = ({ resume }) => {
   return (
     <div className="bg-white w-full h-full p-12 text-gray-900 font-serif leading-relaxed">
       {/* Header */}
-      <div className="text-center border-b border-gray-300 pb-6 mb-6">
-        <h1 className="text-3xl font-bold mb-2">{resume.personalInfo.fullName}</h1>
-        <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-sm text-gray-700">
-          {resume.personalInfo.location && <span>{resume.personalInfo.location}</span>}
-          {resume.personalInfo.phone && <span>{resume.personalInfo.phone}</span>}
-          {resume.personalInfo.email && <span>{resume.personalInfo.email}</span>}
-          {resume.personalInfo.website && <span>{resume.personalInfo.website}</span>}
+      <div className="flex justify-between items-start border-b border-gray-300 pb-6 mb-6">
+        <div className="flex-1 pr-6">
+          <h1 className="text-3xl font-bold mb-2">{resume.personalInfo.fullName}</h1>
+          <div className="flex flex-col text-sm text-gray-700">
+            {resume.personalInfo.location && <span>{resume.personalInfo.location}</span>}
+            {resume.personalInfo.phone && <span>{resume.personalInfo.phone}</span>}
+            {resume.personalInfo.email && <span>{resume.personalInfo.email}</span>}
+            {resume.personalInfo.website && <span>{resume.personalInfo.website}</span>}
+          </div>
         </div>
+        <ProfilePhoto 
+          url={resume.personalInfo.photoUrl} 
+          initials={resume.personalInfo.fullName?.charAt(0)}
+          className="w-24 h-24 border border-gray-200 shrink-0"
+        />
       </div>
 
       {/* Education First for Academic */}
@@ -22,8 +30,8 @@ export const AcademicTemplate: React.FC<{ resume: Resume }> = ({ resume }) => {
         <section className="mb-6">
           <h2 className="text-base font-bold uppercase border-b border-gray-300 mb-3 pb-1">Education</h2>
           <div className="space-y-3">
-            {resume.education.map((edu) => (
-              <div key={edu.id}>
+            {resume.education.map((edu, i) => (
+              <div key={edu.id || i}>
                 <div className="flex justify-between font-bold">
                   <span>{edu.institution}</span>
                   <span>{edu.startDate} – {edu.endDate}</span>
@@ -50,15 +58,15 @@ export const AcademicTemplate: React.FC<{ resume: Resume }> = ({ resume }) => {
         <section className="mb-6">
           <h2 className="text-base font-bold uppercase border-b border-gray-300 mb-3 pb-1">{experienceTitle}</h2>
           <div className="space-y-5">
-            {resume.experience.map((exp) => (
-              <div key={exp.id}>
+            {resume.experience.map((exp, i) => (
+              <div key={exp.id || i}>
                 <div className="flex justify-between font-bold">
                   <span>{exp.company}</span>
                   <span>{exp.startDate} – {exp.current ? 'Present' : exp.endDate}</span>
                 </div>
                 <div className="italic mb-1">{exp.position}</div>
                 <ul className="list-disc list-outside ml-5 text-sm space-y-1">
-                  {exp.description.split('\n').map((line, i) => line.trim() && <li key={i}>{line.trim().replace(/^•\s*/, '')}</li>)}
+                  {exp.description.split('\n').filter(l => l.trim()).map((line, i) => <li key={i}>{line.trim().replace(/^•\s*/, '')}</li>)}
                 </ul>
               </div>
             ))}
@@ -71,8 +79,8 @@ export const AcademicTemplate: React.FC<{ resume: Resume }> = ({ resume }) => {
         <section className="mb-6">
           <h2 className="text-base font-bold uppercase border-b border-gray-300 mb-3 pb-1">Projects & Publications</h2>
           <div className="space-y-3">
-            {resume.projects.map((proj) => (
-              <div key={proj.id}>
+            {resume.projects.map((proj, i) => (
+              <div key={proj.id || i}>
                 <div className="font-bold">{proj.name}</div>
                 <p className="text-sm">{proj.description}</p>
                 {proj.link && <a href={proj.link} className="text-xs text-blue-800 underline block mt-1">{proj.link}</a>}

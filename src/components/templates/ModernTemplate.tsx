@@ -1,6 +1,7 @@
 import React from 'react';
 import { Resume, FIELD_SECTIONS } from '../../types';
 import { Phone, Mail, MapPin, Globe } from 'lucide-react';
+import { ProfilePhoto } from './ProfilePhoto';
 
 export const ModernTemplate: React.FC<{ resume: Resume }> = ({ resume }) => {
   const experienceTitle = FIELD_SECTIONS[resume.field]?.experience || 'Experience';
@@ -11,15 +12,13 @@ export const ModernTemplate: React.FC<{ resume: Resume }> = ({ resume }) => {
       <div className="w-[35%] bg-[#F3F0FF] p-8 flex flex-col gap-8 text-gray-800">
         {/* Profile Image */}
         <div className="flex justify-center">
-          <div className="w-40 h-40 rounded-full border-4 border-white shadow-md overflow-hidden bg-gray-200 relative">
-            {resume.personalInfo.photoUrl ? (
-              <img src={resume.personalInfo.photoUrl} alt="Profile" className="w-full h-full object-cover" />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center text-gray-400 text-4xl font-bold bg-indigo-100 text-indigo-300">
-                {resume.personalInfo.fullName?.charAt(0) || 'U'}
-              </div>
-            )}
-          </div>
+          <ProfilePhoto 
+            url={resume.personalInfo.photoUrl} 
+            initials={resume.personalInfo.fullName?.charAt(0)}
+            className="w-40 h-40 rounded-full border-4 border-white shadow-md"
+            bgColor="bg-indigo-100"
+            iconColor="text-indigo-300"
+          />
         </div>
 
         {/* Contact */}
@@ -38,8 +37,8 @@ export const ModernTemplate: React.FC<{ resume: Resume }> = ({ resume }) => {
           <div>
             <h3 className="text-lg font-bold text-gray-900 mb-4 border-b border-gray-300 pb-2">Education</h3>
             <div className="space-y-4">
-              {resume.education.map((edu) => (
-                <div key={edu.id}>
+              {resume.education.map((edu, index) => (
+                <div key={edu.id || index}>
                   <p className="text-xs font-semibold text-indigo-600">{edu.startDate} - {edu.endDate}</p>
                   <p className="font-bold text-sm text-gray-900 mt-0.5">{edu.degree}</p>
                   <p className="text-xs text-gray-600">{edu.institution}</p>
@@ -56,6 +55,18 @@ export const ModernTemplate: React.FC<{ resume: Resume }> = ({ resume }) => {
             <ul className="space-y-2 text-sm">
               {resume.skills.map((skill, i) => (
                 <li key={i} className="flex items-center gap-2"><span className="w-1.5 h-1.5 bg-indigo-600 rounded-full"></span>{skill}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+        
+        {/* Languages */}
+        {resume.languages && resume.languages.length > 0 && (
+          <div>
+            <h3 className="text-lg font-bold text-gray-900 mb-4 border-b border-gray-300 pb-2">Languages</h3>
+            <ul className="space-y-2 text-sm">
+              {resume.languages.map((lang, i) => (
+                <li key={i} className="flex items-center gap-2"><span className="w-1.5 h-1.5 bg-indigo-600 rounded-full"></span>{lang}</li>
               ))}
             </ul>
           </div>
@@ -80,8 +91,8 @@ export const ModernTemplate: React.FC<{ resume: Resume }> = ({ resume }) => {
           <section className="mb-10">
             <h2 className="text-xl font-bold text-gray-900 mb-6">{experienceTitle}</h2>
             <div className="space-y-8 border-l-2 border-indigo-100 ml-1 pl-6 relative">
-              {resume.experience.map((exp) => (
-                <div key={exp.id} className="relative">
+              {resume.experience.map((exp, index) => (
+                <div key={exp.id || index} className="relative">
                   <span className="absolute -left-[31px] top-1.5 w-3 h-3 bg-indigo-600 rounded-full border-2 border-white ring-1 ring-indigo-100"></span>
                   <div className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between mb-1">
                     <h3 className="text-lg font-bold text-gray-900">{exp.position}</h3>
@@ -89,8 +100,32 @@ export const ModernTemplate: React.FC<{ resume: Resume }> = ({ resume }) => {
                   </div>
                   <p className="text-sm font-medium text-indigo-500 mb-3">{exp.company}</p>
                   <ul className="list-disc list-outside ml-4 space-y-1.5 text-sm text-gray-600">
-                    {exp.description.split('\n').map((line, i) => line.trim() && <li key={i}>{line.trim().replace(/^•\s*/, '')}</li>)}
+                    {exp.description
+                      .split('\n')
+                      .filter(line => line.trim())
+                      .map((line, i) => (
+                        <li key={i}>{line.trim().replace(/^•\s*/, '')}</li>
+                      ))
+                    }
                   </ul>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {resume.projects.length > 0 && (
+          <section className="mb-10">
+            <h2 className="text-xl font-bold text-gray-900 mb-6">Projects</h2>
+            <div className="space-y-6">
+              {resume.projects.map((proj, index) => (
+                <div key={proj.id || index}>
+                  <div className="flex justify-between items-baseline mb-1">
+                    <h3 className="text-lg font-bold text-gray-900">{proj.name}</h3>
+                    {proj.link && <a href={proj.link} target="_blank" rel="noreferrer" className="text-xs text-indigo-600 hover:underline">Link</a>}
+                  </div>
+                  <p className="text-xs text-indigo-500 font-medium mb-2">{proj.technologies}</p>
+                  <p className="text-sm text-gray-600">{proj.description}</p>
                 </div>
               ))}
             </div>
