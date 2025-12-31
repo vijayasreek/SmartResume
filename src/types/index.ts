@@ -2,7 +2,6 @@ export interface User {
   id: string;
   name: string;
   email: string;
-  // passwordHash removed as Supabase handles auth securely
 }
 
 export interface Resume {
@@ -10,6 +9,7 @@ export interface Resume {
   userId: string;
   title: string;
   field: ResumeField;
+  templateId: string;
   personalInfo: {
     fullName: string;
     email: string;
@@ -100,3 +100,15 @@ export const FIELD_SECTIONS: Record<ResumeField, { experience: string }> = {
   'Student / Fresher': { experience: 'Internships & Experience' },
   'General': { experience: 'Experience' }
 };
+
+export const TEMPLATES = [
+  { id: 'modern', name: 'Modern', description: 'Clean sidebar layout, perfect for most professionals.', thumbnail: 'https://img-wrapper.vercel.app/image?url=https://placehold.co/300x400/e0e7ff/4f46e5?text=Modern' },
+  { id: 'minimalist', name: 'Minimalist', description: 'Simple, single-column, ATS-friendly design.', thumbnail: 'https://img-wrapper.vercel.app/image?url=https://placehold.co/300x400/ffffff/333333?text=Minimalist' },
+  { id: 'executive', name: 'Executive', description: 'Traditional, serif fonts, authoritative look.', thumbnail: 'https://img-wrapper.vercel.app/image?url=https://placehold.co/300x400/f8f9fa/2c3e50?text=Executive' },
+  { id: 'creative', name: 'Creative', description: 'Bold header and colors for creative roles.', thumbnail: 'https://img-wrapper.vercel.app/image?url=https://placehold.co/300x400/fff0f5/db2777?text=Creative' },
+  { id: 'tech', name: 'Tech', description: 'Right sidebar with technical accents.', thumbnail: 'https://img-wrapper.vercel.app/image?url=https://placehold.co/300x400/1e293b/60a5fa?text=Tech' },
+  { id: 'professional', name: 'Professional', description: 'Balanced layout with subtle borders.', thumbnail: 'https://img-wrapper.vercel.app/image?url=https://placehold.co/300x400/f0fdf4/166534?text=Professional' },
+  { id: 'academic', name: 'Academic', description: 'Education-focused, classic layout for researchers.', thumbnail: 'https://img-wrapper.vercel.app/image?url=https://placehold.co/300x400/fff/000?text=Academic' },
+  { id: 'healthcare', name: 'Healthcare', description: 'Clean, clinical blue accents for medical pros.', thumbnail: 'https://img-wrapper.vercel.app/image?url=https://placehold.co/300x400/e0f2fe/0284c7?text=Healthcare' },
+  { id: 'banking', name: 'Banking', description: 'Compact, high-density layout for finance.', thumbnail: 'https://img-wrapper.vercel.app/image?url=https://placehold.co/300x400/f8fafc/0f172a?text=Banking' }
+];

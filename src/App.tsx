@@ -7,6 +7,7 @@ import { AuthPage } from './pages/Auth';
 import { Dashboard } from './pages/Dashboard';
 import { ResumeBuilder } from './pages/ResumeBuilder';
 import { Settings } from './pages/Settings';
+import { TemplatesGallery } from './pages/TemplatesGallery';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
@@ -24,6 +25,7 @@ function App() {
             <Route index element={<Landing />} />
             <Route path="login" element={<AuthPage type="login" />} />
             <Route path="register" element={<AuthPage type="register" />} />
+            <Route path="templates" element={<TemplatesGallery />} />
             
             <Route path="dashboard" element={
               <ProtectedRoute><Dashboard /></ProtectedRoute>

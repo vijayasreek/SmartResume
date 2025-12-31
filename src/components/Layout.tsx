@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { FileText, LogOut, User, Plus, LayoutDashboard, Settings } from 'lucide-react';
+import { FileText, LogOut, User, Plus, LayoutDashboard, Settings, LayoutTemplate } from 'lucide-react';
 import { Button } from './ui/Button';
 
 export const Layout = () => {
@@ -29,22 +29,22 @@ export const Layout = () => {
                 <span className="text-xl font-bold text-gray-900 tracking-tight">ResuMates</span>
               </Link>
               
-              {user && (
-                <nav className="ml-10 flex space-x-4">
+              <nav className="ml-10 flex space-x-4">
+                 {user && (
                   <Link 
                     to="/dashboard" 
                     className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${isActive('/dashboard') ? 'bg-indigo-50 text-indigo-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'}`}
                   >
                     Dashboard
                   </Link>
-                  <Link 
-                    to="/create" 
-                    className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${isActive('/create') ? 'bg-indigo-50 text-indigo-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'}`}
+                 )}
+                 <Link 
+                    to="/templates" 
+                    className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${isActive('/templates') ? 'bg-indigo-50 text-indigo-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'}`}
                   >
-                    Create New
+                    Templates
                   </Link>
-                </nav>
-              )}
+              </nav>
             </div>
 
             <div className="flex items-center gap-4">

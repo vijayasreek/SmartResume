@@ -4,7 +4,6 @@ import { Session } from '@supabase/supabase-js';
 
 export const storage = {
   // --- Auth & User ---
-  // Optimized to accept session if we already have it (avoids extra call)
   getCurrentUser: async (existingSession?: Session | null): Promise<User | null> => {
     let session = existingSession;
     
@@ -15,8 +14,6 @@ export const storage = {
 
     if (!session?.user) return null;
 
-    // Fetch profile to get the name
-    // We use maybeSingle() instead of single() to avoid errors if profile creation is delayed
     const { data: profile } = await supabase
       .from('profiles')
       .select('name, email')
@@ -26,7 +23,6 @@ export const storage = {
     return {
       id: session.user.id,
       email: session.user.email!,
-      // Prioritize profile name, fallback to metadata (faster), then default
       name: profile?.name || session.user.user_metadata?.name || 'User',
     };
   },
@@ -46,6 +42,7 @@ export const storage = {
       userId: r.user_id,
       title: r.title,
       field: r.field,
+      templateId: r.template_id || 'modern', // Default to modern
       personalInfo: r.personal_info,
       experience: r.experience,
       education: r.education,
@@ -71,6 +68,7 @@ export const storage = {
       userId: data.user_id,
       title: data.title,
       field: data.field,
+      templateId: data.template_id || 'modern',
       personalInfo: data.personal_info,
       experience: data.experience,
       education: data.education,
@@ -87,6 +85,7 @@ export const storage = {
       user_id: userId,
       title: resume.title,
       field: resume.field,
+      template_id: resume.templateId, // Save template preference
       personal_info: resume.personalInfo,
       experience: resume.experience,
       education: resume.education,
@@ -123,6 +122,7 @@ export const storage = {
       userId: result.user_id,
       title: result.title,
       field: result.field,
+      templateId: result.template_id || 'modern',
       personalInfo: result.personal_info,
       experience: result.experience,
       education: result.education,
@@ -141,5 +141,28 @@ export const storage = {
       .eq('id', id);
     
     if (error) throw error;
+  },
+
+  // --- Storage ---
+  uploadImage: async (file: File, userId: string): Promise<string> => {
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${userId}/${Date.now()}.${fileExt}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('resume-photos')
+      .upload(fileName, file, {
+        cacheControl: '3600',
+        upsert: false
+      });
+
+    if (uploadError) {
+      throw uploadError;
+    }
+
+    const { data } = supabase.storage
+      .from('resume-photos')
+      .getPublicUrl(fileName);
+
+    return data.publicUrl;
   }
 };
